@@ -289,14 +289,41 @@ async function doMigrate() {
 async function refreshClients() {
   try {
     const list = await window.harbor.discover();
+    // 徽章：只显示已安装
     $("#clients").innerHTML = list
-      .map(
-        (c) =>
-          `<span class="chip ${c.ok ? "ok" : "err"}" title="${escapeHtml(c.info || c.error || "")}">${c.id}${c.ok ? "" : " ✗"}</span>`,
-      )
+      .filter((c) => c.installed || c.ok)
+      .map((c) => {
+        const ok = c.installed ?? c.ok;
+        const label = c.displayName || c.id;
+        return `<span class="chip ${ok ? "ok" : "err"}" title="${escapeHtml(c.info || c.error || "")}">${escapeHtml(label)}</span>`;
+      })
       .join("");
+
+    // 下拉框：只保留已检测到的客户端
+    const installed = list.filter((c) => (c.installed ?? c.ok) && c.canWrite !== false);
+    const readInstalled = list.filter((c) => c.installed ?? c.ok);
+    const src = $("#client");
+    const dst = $("#migrateTo");
+    const prevSrc = src.value;
+    const prevDst = dst.value;
+    src.innerHTML = readInstalled
+      .map((c) => `<option value="${c.id}">${escapeHtml(c.displayName || c.id)}</option>`)
+      .join("");
+    if (!src.innerHTML) src.innerHTML = '<option value="">（未检测到客户端）</option>';
+    if ([...src.options].some((o) => o.value === prevSrc)) src.value = prevSrc;
+
+    dst.innerHTML =
+      '<option value="">迁移到…</option>' +
+      installed
+        .map((c) => `<option value="${c.id}">${escapeHtml(c.displayName || c.id)}</option>`)
+        .join("");
+    if ([...dst.options].some((o) => o.value === prevDst)) dst.value = prevDst;
+
+    const n = readInstalled.length;
+    status(`已自动检测本机 ${n} 个客户端可解析会话库`);
+    return list;
   } catch {
-    /* ignore */
+    return [];
   }
 }
 

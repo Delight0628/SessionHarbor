@@ -33,39 +33,78 @@ const WORKDIR = process.env.HARBOR_WORKDIR || process.cwd();
 type ClientId = "alink" | "claude-code" | "workbuddy" | "codex" | "mimo" | "chatgpt-export";
 const CLIENTS: ClientId[] = ["alink", "claude-code", "workbuddy", "codex", "mimo", "chatgpt-export"];
 
-function getAdapter(id: ClientId) {
-  switch (id) {
-    case "alink":
-      return createAlinkAdapter(discoverAlink());
-    case "claude-code":
-      return createClaudeCodeAdapter(discoverClaudeCode());
-    case "workbuddy":
-      return createWorkbuddyAdapter(discoverWorkbuddy());
-    case "codex":
-      return createCodexAdapter(discoverCodex());
-    case "mimo":
-      return createMimoAdapter(discoverMimo());
-    case "chatgpt-export":
-      return createChatGptExportAdapter(
-        discoverChatGptExport(process.env.HARBOR_CHATGPT_EXPORT),
-      );
-  }
-}
+const CLIENT_META: Array<{
+  id: ClientId;
+  displayName: string;
+  discover: () => ClientPathsLike;
+  canWrite?: boolean;
+}> = [
+  { id: "alink", displayName: "领慧AI工作台", discover: () => discoverAlink() },
+  { id: "claude-code", displayName: "Claude Code", discover: () => discoverClaudeCode() },
+  { id: "workbuddy", displayName: "WorkBuddy", discover: () => discoverWorkbuddy() },
+  { id: "codex", displayName: "Codex", discover: () => discoverCodex() },
+  { id: "mimo", displayName: "MiMo Desktop", discover: () => discoverMimo() },
+  {
+    id: "chatgpt-export",
+    displayName: "ChatGPT Export",
+    discover: () => discoverChatGptExport(process.env.HARBOR_CHATGPT_EXPORT),
+    canWrite: false,
+  },
+];
 
-function discoverAll(): Array<{ id: string; ok: boolean; info?: string; error?: string }> {
-  return CLIENTS.map((id) => {
+type Detected = {
+  id: string;
+  displayName: string;
+  installed: boolean;
+  canRead: boolean;
+  canWrite: boolean;
+  info?: string;
+  error?: string;
+};
+
+function discoverAll(): Detected[] {
+  return CLIENT_META.map((c) => {
     try {
-      const a = getAdapter(id);
-      const p = a.discover() as ClientPathsLike & { sessionsRoot?: string };
+      const p = c.discover();
       return {
-        id,
-        ok: true,
-        info: [p.primaryDb, p.jsonlDir, p.projectsRoot, p.sessionsRoot].filter(Boolean).join(" | "),
+        id: c.id,
+        displayName: c.displayName,
+        installed: true,
+        canRead: true,
+        canWrite: c.canWrite !== false,
+        info: [p.primaryDb, p.jsonlDir, p.projectsRoot, p.dataRoot].filter(Boolean).join(" | "),
       };
     } catch (e) {
-      return { id, ok: false, error: e instanceof Error ? e.message : String(e) };
+      return {
+        id: c.id,
+        displayName: c.displayName,
+        installed: false,
+        canRead: false,
+        canWrite: false,
+        error: e instanceof Error ? e.message : String(e),
+      };
     }
   });
+}
+
+function getAdapter(id: ClientId) {
+  const meta = CLIENT_META.find((c) => c.id === id);
+  if (!meta) throw new Error(`未知客户端: ${id}`);
+  const paths = meta.discover();
+  switch (id) {
+    case "alink":
+      return createAlinkAdapter(paths as never);
+    case "claude-code":
+      return createClaudeCodeAdapter(paths);
+    case "workbuddy":
+      return createWorkbuddyAdapter(paths);
+    case "codex":
+      return createCodexAdapter(paths as never);
+    case "mimo":
+      return createMimoAdapter(paths);
+    case "chatgpt-export":
+      return createChatGptExportAdapter(paths as never);
+  }
 }
 
 function createWindow() {
@@ -147,21 +186,19 @@ ipcMain.handle("harbor:exportHtml", async (_e, client: ClientId, id: string) => 
 ipcMain.handle("harbor:scan", async (_e, client: ClientId | "all") => {
   const indexPath = defaultIndexPath(WORKDIR);
   const index = new SessionIndex(indexPath);
-  const clients: ClientId[] = client === "all" ? CLIENTS.filter((c) => {
-    try {
-      getAdapter(c);
-      return true;
-    } catch {
-      return false;
-    }
-  }) : [client];
+  const detected = discoverAll();
+  const installed = new Set(detected.filter((d) => d.installed).map((d) => d.id));
+  const clients: ClientId[] =
+    client === "all"
+      ? (CLIENTS.filter((c) => installed.has(c)) as ClientId[])
+      : [client];
   let n = 0;
   const t0 = Date.now();
+  index.beginBulkRebuild();
   for (const id of clients) {
     try {
       const adapter = getAdapter(id);
       const sessions = await adapter.listSessions();
-      index.begin();
       for (const s of sessions) {
         try {
           index.upsertIR(await adapter.readSession(s.id));
@@ -174,16 +211,15 @@ ipcMain.handle("harbor:scan", async (_e, client: ClientId | "all") => {
           index.begin();
         }
       }
-      index.commit();
     } catch (e) {
-      index.rollback();
       console.error(e);
     }
   }
+  index.endBulkRebuild();
   const ms = Date.now() - t0;
   const total = index.count();
   index.close();
-  return { indexed: n, total, ms, indexPath };
+  return { indexed: n, total, ms, indexPath, clients };
 });
 
 ipcMain.handle("harbor:search", (_e, q: string, limit = 20) => {

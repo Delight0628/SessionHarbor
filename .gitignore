@@ -27,6 +27,7 @@ auth.json
 # 编辑器
 .vscode/
 .idea/
+.claude/
 
 # 大体积真实会话样本（本地用，不入库；仅保留小体积脱敏 fixture）
 fixtures/claude-code/0089fd68-3f83-4028-897c-b954525b3b3c.jsonl

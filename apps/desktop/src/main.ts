@@ -21,6 +21,7 @@ import { createAlinkAdapter } from "@sessionharbor/adapter-alink";
 import { createClaudeCodeAdapter } from "@sessionharbor/adapter-claude-code";
 import { createWorkbuddyAdapter } from "@sessionharbor/adapter-workbuddy";
 import { createCodexAdapter, discoverCodex } from "@sessionharbor/adapter-codex";
+import { createMimoAdapter, discoverMimo } from "@sessionharbor/adapter-mimo";
 import {
   createChatGptExportAdapter,
   discoverChatGptExport,
@@ -29,8 +30,8 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WORKDIR = process.env.HARBOR_WORKDIR || process.cwd();
 
-type ClientId = "alink" | "claude-code" | "workbuddy" | "codex" | "chatgpt-export";
-const CLIENTS: ClientId[] = ["alink", "claude-code", "workbuddy", "codex", "chatgpt-export"];
+type ClientId = "alink" | "claude-code" | "workbuddy" | "codex" | "mimo" | "chatgpt-export";
+const CLIENTS: ClientId[] = ["alink", "claude-code", "workbuddy", "codex", "mimo", "chatgpt-export"];
 
 function getAdapter(id: ClientId) {
   switch (id) {
@@ -42,6 +43,8 @@ function getAdapter(id: ClientId) {
       return createWorkbuddyAdapter(discoverWorkbuddy());
     case "codex":
       return createCodexAdapter(discoverCodex());
+    case "mimo":
+      return createMimoAdapter(discoverMimo());
     case "chatgpt-export":
       return createChatGptExportAdapter(
         discoverChatGptExport(process.env.HARBOR_CHATGPT_EXPORT),

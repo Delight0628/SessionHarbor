@@ -12,6 +12,7 @@ exports/
 .sessionharbor/
 sandbox-m0/
 sandbox-e2e/
+sandbox-mimo/
 *.log
 
 # 敏感/本机数据

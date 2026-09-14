@@ -22,6 +22,9 @@ importers:
       '@sessionharbor/adapter-codex':
         specifier: workspace:*
         version: link:../../packages/adapters/codex
+      '@sessionharbor/adapter-mimo':
+        specifier: workspace:*
+        version: link:../../packages/adapters/mimo
       '@sessionharbor/adapter-workbuddy':
         specifier: workspace:*
         version: link:../../packages/adapters/workbuddy
@@ -91,6 +94,19 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/adapters/mimo:
+    dependencies:
+      '@sessionharbor/core':
+        specifier: workspace:*
+        version: link:../../core
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.4
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/adapters/workbuddy:
     dependencies:
       '@sessionharbor/core':
@@ -118,6 +134,9 @@ importers:
       '@sessionharbor/adapter-codex':
         specifier: workspace:*
         version: link:../adapters/codex
+      '@sessionharbor/adapter-mimo':
+        specifier: workspace:*
+        version: link:../adapters/mimo
       '@sessionharbor/adapter-workbuddy':
         specifier: workspace:*
         version: link:../adapters/workbuddy

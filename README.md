@@ -9,7 +9,7 @@
 | 能力 | 状态 |
 |---|---|
 | IR v1 | ✅ |
-| 适配器：领慧 / CC / WorkBuddy / Codex / ChatGPT Export | ✅ |
+| 适配器：领慧 / CC / WorkBuddy / Codex / **MiMo** / ChatGPT Export | ✅ 6 客户端 |
 | CLI：info/list/scan/search/migrate/export/backup/watch/**secrets**/**dedup** | ✅ |
 | FTS5 索引 | ✅ 1 万会话 3.2s，搜索 <40ms |
 | 增量 watcher | ✅ |
@@ -34,7 +34,7 @@
 ```
 SessionHarbor/
 ├─ packages/core/           # IR、索引、迁移、脱敏、去重、watcher
-├─ packages/adapters/*      # claude-code alink workbuddy codex chatgpt-export
+├─ packages/adapters/*      # claude-code alink workbuddy codex mimo chatgpt-export
 ├─ packages/cli/            # harbor 命令
 ├─ apps/desktop/            # Electron GUI
 ├─ fixtures/                # 脱敏样本
@@ -84,6 +84,10 @@ $harbor = "packages\cli\dist\bin.js"
 
 # 增量监听（自动刷新索引）
 & $node $harbor watch --client claude-code
+
+# MiMo Desktop（本地 mimocode.db）
+& $node $harbor list --client mimo
+& $node $harbor migrate --from alink --to mimo --id <uuid> --dry-run
 
 # 1 万会话索引压测
 & $node scripts\bench-index.mjs

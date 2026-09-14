@@ -14,6 +14,7 @@
     "@sessionharbor/adapter-chatgpt-export": "workspace:*",
     "@sessionharbor/adapter-claude-code": "workspace:*",
     "@sessionharbor/adapter-codex": "workspace:*",
+    "@sessionharbor/adapter-mimo": "workspace:*",
     "@sessionharbor/adapter-workbuddy": "workspace:*",
     "@sessionharbor/core": "workspace:*"
   },

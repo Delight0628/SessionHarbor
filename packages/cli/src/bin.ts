@@ -33,12 +33,13 @@ import { createAlinkAdapter } from "@sessionharbor/adapter-alink";
 import { createClaudeCodeAdapter } from "@sessionharbor/adapter-claude-code";
 import { createWorkbuddyAdapter } from "@sessionharbor/adapter-workbuddy";
 import { createCodexAdapter, discoverCodex } from "@sessionharbor/adapter-codex";
+import { createMimoAdapter, discoverMimo } from "@sessionharbor/adapter-mimo";
 import {
   createChatGptExportAdapter,
   discoverChatGptExport,
 } from "@sessionharbor/adapter-chatgpt-export";
 
-const CLIENTS = ["alink", "claude-code", "workbuddy", "codex", "chatgpt-export"] as const;
+const CLIENTS = ["alink", "claude-code", "workbuddy", "codex", "mimo", "chatgpt-export"] as const;
 type ClientId = (typeof CLIENTS)[number];
 
 function parseArgs(argv: string[]) {
@@ -90,6 +91,8 @@ function getClientPaths(
       return discoverWorkbuddy(args["wb-db"] as string | undefined);
     case "codex":
       return discoverCodex(args["codex-root"] as string | undefined);
+    case "mimo":
+      return discoverMimo(args["mimo-db"] as string | undefined);
     case "chatgpt-export":
       return discoverChatGptExport(args["chatgpt-export"] as string | undefined);
   }
@@ -103,6 +106,7 @@ function getAdapter(
   if (id === "alink") return createAlinkAdapter(paths as never);
   if (id === "claude-code") return createClaudeCodeAdapter(paths);
   if (id === "codex") return createCodexAdapter(paths as never);
+  if (id === "mimo") return createMimoAdapter(paths);
   if (id === "chatgpt-export") return createChatGptExportAdapter(paths as never);
   return createWorkbuddyAdapter(paths);
 }
@@ -130,7 +134,7 @@ function help(): void {
 
 用法:
   harbor info
-  harbor list --client alink|claude-code|workbuddy|codex|chatgpt-export [--json] [--title 关键字]
+  harbor list --client alink|claude-code|workbuddy|codex|mimo|chatgpt-export [--json] [--title 关键字]
   harbor scan [--client ...]          构建/刷新本地 FTS 索引
   harbor search <关键词> [--limit N]   统一全文检索
   harbor migrate --from A --to B [--title ...] [--id ...] [--dry-run] [--overwrite] [--yes]

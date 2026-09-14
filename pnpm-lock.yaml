@@ -208,6 +208,19 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/cloud-server:
+    dependencies:
+      '@sessionharbor/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.4
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/core:
     devDependencies:
       '@types/node':

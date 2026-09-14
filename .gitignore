@@ -13,6 +13,8 @@ exports/
 sandbox-m0/
 sandbox-e2e/
 sandbox-mimo/
+cloud-data/
+cloud-cli-test/
 *.log
 
 # 敏感/本机数据

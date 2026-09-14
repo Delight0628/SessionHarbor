@@ -32,11 +32,21 @@
 | **托管云 Team** | 按席位 | 团队会话库 + 审计 + 企业 SSO |
 
 ```powershell
+# 启动托管云服务端（登录 + 按用户隔离存储）
+node packages\cloud-server\dist\server.js
+# 默认 http://127.0.0.1:8787 ，数据目录 cloud-data/
+
+# 客户端注册/登录（token 本地保存）
+harbor register --email you@x.com --password <6位+> --endpoint http://127.0.0.1:8787
+harbor login    --email you@x.com --password <密码>   --endpoint http://127.0.0.1:8787
+harbor whoami
+
 harbor pricing          # 查看套餐说明
 # 另一台电脑下载：
 harbor sync pull session --id <id> --passphrase <同密钥> --cloud-root <同一网盘目录>
-# 或 --webdav https://dav.example.com --webdav-user u --webdav-password p
-# 可选写回客户端：--restore-to alink
+# 托管云登录后直接：
+harbor sync push session --id <id>
+harbor sync pull session --id <id> --restore-to alink
 ```
 
 ## 文档

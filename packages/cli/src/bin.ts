@@ -35,6 +35,7 @@ import {
   listCloudSessions,
   formatPricing,
   planDisplay,
+  saveSyncConfig,
   type ClientPathsLike,
   type FilterSpec,
 } from "@sessionharbor/core";
@@ -182,6 +183,10 @@ function help(): void {
              [--restore-to CLIENT] [--passphrase K] [--dry-run] [--list-cloud]
              同步：BYO 网盘/WebDAV 免费；托管云需订阅（见 harbor pricing）
   harbor pricing              查看套餐与盈利模式说明
+  harbor register --email E --password P [--endpoint URL]   托管云注册并登录
+  harbor login --email E --password P [--endpoint URL]      托管云登录
+  harbor whoami                                               查看托管云账号/额度
+  # 启动本地云端: node packages/cloud-server/dist/server.js
 
 全局选项:
   --workdir DIR       备份/日志/索引目录（默认 cwd）
@@ -684,6 +689,115 @@ async function cmdSync(args: Record<string, string | boolean | string[]>, positi
   return report.failed ? 1 : 0;
 }
 
+async function cloudEndpoint(args: Record<string, string | boolean | string[]>): Promise<string> {
+  const cfg = loadOrCreateSyncConfig(workdir(args));
+  const ep = (args.endpoint as string) || cfg.hostedEndpoint || process.env.HARBOR_CLOUD_URL || "http://127.0.0.1:8787";
+  return String(ep).replace(/\/+$/, "");
+}
+
+async function cmdRegister(args: Record<string, string | boolean | string[]>, positional: string[]): Promise<number> {
+  const email = String(args.email ?? positional[0] ?? "");
+  const password = String(args.password ?? positional[1] ?? "");
+  if (!email || !password) {
+    console.error("用法: harbor register --email you@x.com --password <至少6位> [--endpoint URL]");
+    return 2;
+  }
+  const ep = await cloudEndpoint(args);
+  const res = await fetch(`${ep}/v1/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const body = (await res.json()) as { error?: string; token?: string; userId?: string; plan?: string };
+  if (!res.ok) {
+    console.error(`注册失败: ${body.error || res.status}`);
+    return 1;
+  }
+  const wd = workdir(args);
+  const cfg = loadOrCreateSyncConfig(wd);
+  cfg.targetKind = "hosted";
+  cfg.hostedEndpoint = ep;
+  cfg.hostedToken = body.token;
+  cfg.license = {
+    plan: (body.plan as "free" | "pro" | "team") || "free",
+    accountId: body.userId,
+    hostedEndpoint: ep,
+    expiresAt: body.plan && body.plan !== "free" ? undefined : new Date(Date.now() + 365 * 86400000).toISOString(),
+  };
+  // free 也要能 hosted 试用：给 30 天 soft license 标记 endpoint
+  if (!cfg.license.expiresAt) cfg.license.expiresAt = new Date(Date.now() + 30 * 86400000).toISOString();
+  saveSyncConfig(wd, cfg);
+  console.log(`注册成功 plan=${body.plan} userId=${body.userId}`);
+  console.log(`endpoint: ${ep}`);
+  console.log(`token 已写入本地配置（勿泄露）: ${syncConfigPathSafe(wd)}`);
+  return 0;
+}
+
+function syncConfigPathSafe(wd: string): string {
+  return path.join(wd, ".sessionharbor", "sync", "config.json");
+}
+
+async function cmdLogin(args: Record<string, string | boolean | string[]>, positional: string[]): Promise<number> {
+  const email = String(args.email ?? positional[0] ?? "");
+  const password = String(args.password ?? positional[1] ?? "");
+  if (!email || !password) {
+    console.error("用法: harbor login --email you@x.com --password <密码> [--endpoint URL]");
+    return 2;
+  }
+  const ep = await cloudEndpoint(args);
+  const res = await fetch(`${ep}/v1/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const body = (await res.json()) as { error?: string; token?: string; userId?: string; plan?: string };
+  if (!res.ok) {
+    console.error(`登录失败: ${body.error || res.status}`);
+    return 1;
+  }
+  const wd = workdir(args);
+  const cfg = loadOrCreateSyncConfig(wd);
+  cfg.targetKind = "hosted";
+  cfg.hostedEndpoint = ep;
+  cfg.hostedToken = body.token;
+  cfg.license = {
+    plan: (body.plan as "free" | "pro" | "team") || "free",
+    accountId: body.userId,
+    hostedEndpoint: ep,
+    expiresAt: new Date(Date.now() + 30 * 86400000).toISOString(),
+  };
+  saveSyncConfig(wd, cfg);
+  console.log(`登录成功 plan=${body.plan} userId=${body.userId}`);
+  console.log(`endpoint: ${ep}`);
+  return 0;
+}
+
+async function cmdWhoami(args: Record<string, string | boolean | string[]>): Promise<number> {
+  const wd = workdir(args);
+  const cfg = loadOrCreateSyncConfig(wd);
+  if (!cfg.hostedToken || !cfg.hostedEndpoint) {
+    console.log("尚未登录托管云。");
+    console.log("  harbor register --email you@x.com --password ****");
+    console.log("  或 harbor login --email you@x.com --password ****");
+    console.log(`当前 BYO 目标: ${cfg.cloudRoot || "(默认 .sessionharbor/cloud)"}`);
+    console.log(`套餐展示: ${planDisplay(cfg.license)}`);
+    return 0;
+  }
+  const res = await fetch(`${cfg.hostedEndpoint.replace(/\/+$/, "")}/v1/auth/me`, {
+    headers: { Authorization: `Bearer ${cfg.hostedToken}` },
+  });
+  const body = (await res.json()) as Record<string, unknown>;
+  if (!res.ok) {
+    console.error(`查询失败: ${(body as { error?: string }).error || res.status}`);
+    console.log("请重新 harbor login");
+    return 1;
+  }
+  console.log(`已登录: ${body.email}  plan=${body.plan}  userId=${body.userId}`);
+  console.log(`用量: ${JSON.stringify(body.usage)}  额度: ${JSON.stringify(body.quota)}`);
+  console.log(`endpoint: ${cfg.hostedEndpoint}`);
+  return 0;
+}
+
 async function main(): Promise<void> {
   const { args, positional } = parseArgs(process.argv.slice(2));
   const cmd = positional[0] || String(args._ ?? "") || "help";
@@ -721,6 +835,15 @@ async function main(): Promise<void> {
         break;
       case "sync":
         process.exit(await cmdSync(args, positional.slice(1)));
+        break;
+      case "register":
+        process.exit(await cmdRegister(args, positional.slice(1)));
+        break;
+      case "login":
+        process.exit(await cmdLogin(args, positional.slice(1)));
+        break;
+      case "whoami":
+        process.exit(await cmdWhoami(args));
         break;
       case "pricing":
         console.log(formatPricing());

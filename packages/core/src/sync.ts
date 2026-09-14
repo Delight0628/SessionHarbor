@@ -212,7 +212,10 @@ export async function syncToCloud(opts: SyncOptions): Promise<SyncResult> {
       const ir: HarborIR = await s.adapter.readSession(s.id);
       const fp = contentFingerprint({
         session: ir.header.session,
-        items: ir.items.map((i) => ("itemId" in i ? i.itemId : i.type) + i.type),
+        items: ir.items.map((i) => {
+          const a = i as { type: string; itemId?: string };
+          return `${a.itemId || ""}:${a.type}`;
+        }),
       });
       const key = `${s.client}::${s.id}`;
       const prev = byId.get(key);

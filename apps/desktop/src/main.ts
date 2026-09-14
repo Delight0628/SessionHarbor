@@ -37,6 +37,8 @@ import {
 } from "@sessionharbor/adapter-deepseek-harness";
 import { createDevinAdapter, discoverDevin } from "@sessionharbor/adapter-devin";
 import { createTraeSoloAdapter, discoverTrae } from "@sessionharbor/adapter-trae-solo";
+import { createCursorAdapter, discoverCursor } from "@sessionharbor/adapter-cursor";
+import { createVsCodeAdapter, discoverVsCode } from "@sessionharbor/adapter-vscode";
 import {
   createChatGptExportAdapter,
   discoverChatGptExport,
@@ -54,6 +56,8 @@ type ClientId =
   | "deepseek-harness"
   | "devin"
   | "trae-solo"
+  | "cursor"
+  | "vscode"
   | "chatgpt-export";
 const CLIENTS: ClientId[] = [
   "alink",
@@ -64,6 +68,8 @@ const CLIENTS: ClientId[] = [
   "deepseek-harness",
   "devin",
   "trae-solo",
+  "cursor",
+  "vscode",
   "chatgpt-export",
 ];
 
@@ -92,8 +98,20 @@ const CLIENT_META: Array<{
   },
   {
     id: "trae-solo",
-    displayName: "TRAE SOLO CN",
+    displayName: "Trae",
     discover: () => discoverTrae(),
+    canWrite: false,
+  },
+  {
+    id: "cursor",
+    displayName: "Cursor",
+    discover: () => discoverCursor(),
+    canWrite: false,
+  },
+  {
+    id: "vscode",
+    displayName: "VS Code",
+    discover: () => discoverVsCode(),
     canWrite: false,
   },
   {
@@ -142,7 +160,13 @@ function discoverAll(): Detected[] {
 function getAdapter(id: ClientId) {
   const meta = CLIENT_META.find((c) => c.id === id);
   if (!meta) throw new Error(`未知客户端: ${id}`);
-  const paths = meta.discover();
+  let paths: ClientPathsLike;
+  try {
+    paths = meta.discover();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(`${meta.displayName} 未安装或数据目录不可用: ${msg}`);
+  }
   switch (id) {
     case "alink":
       return createAlinkAdapter(paths as never);
@@ -160,9 +184,27 @@ function getAdapter(id: ClientId) {
       return createDevinAdapter(paths as never);
     case "trae-solo":
       return createTraeSoloAdapter(paths as never);
+    case "cursor":
+      return createCursorAdapter(paths as never);
+    case "vscode":
+      return createVsCodeAdapter(paths as never);
     case "chatgpt-export":
       return createChatGptExportAdapter(paths as never);
   }
+}
+
+function resolvePreload(): string {
+  // tsc 输出在 dist/，preload.cjs 在 src/；构建后也会拷贝到 dist/
+  const candidates = [
+    path.join(__dirname, "preload.cjs"),
+    path.join(__dirname, "../src/preload.cjs"),
+    path.join(process.cwd(), "src/preload.cjs"),
+    path.join(process.cwd(), "apps/desktop/src/preload.cjs"),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return candidates[0]!;
 }
 
 function createWindow() {
@@ -172,12 +214,13 @@ function createWindow() {
     title: "SessionHarbor",
     backgroundColor: "#0f1419",
     webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
+      preload: resolvePreload(),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
   win.loadFile(path.join(__dirname, "../renderer/index.html"));
+  return win;
 }
 
 ipcMain.handle("harbor:discover", () => discoverAll());
@@ -257,7 +300,8 @@ ipcMain.handle("harbor:scan", async (_e, client: ClientId | "all") => {
     try {
       const adapter = getAdapter(id);
       const sessions = await adapter.listSessions();
-      for (const s of sessions) {
+      const capped = sessions.slice(0, client === "all" ? SCAN_SESSION_CAP : sessions.length);
+      for (const s of capped) {
         try {
           index.upsertIR(await adapter.readSession(s.id));
           n++;
@@ -465,10 +509,68 @@ ipcMain.handle(
   },
 );
 
+/** 单客户端自动/全量扫描上限，避免 Cursor 等超大库拖死启动 */
+const SCAN_SESSION_CAP = 150;
+
+/** 启动后自动扫描已安装客户端的会话库，不阻塞窗口创建 */
+async function autoScanInstalled(): Promise<void> {
+  try {
+    const detected = discoverAll().filter((d) => d.installed && d.id !== "chatgpt-export");
+    if (!detected.length) return;
+    const indexPath = defaultIndexPath(WORKDIR);
+    const index = new SessionIndex(indexPath);
+    let n = 0;
+    index.beginBulkRebuild();
+    for (const d of detected) {
+      try {
+        const adapter = getAdapter(d.id as ClientId);
+        const sessions = await adapter.listSessions();
+        const capped = sessions.slice(0, SCAN_SESSION_CAP);
+        if (sessions.length > capped.length) {
+          console.log(`auto-scan ${d.id}: cap ${capped.length}/${sessions.length}`);
+        }
+        for (const s of capped) {
+          try {
+            index.upsertIR(await adapter.readSession(s.id));
+            n++;
+          } catch {
+            /* skip */
+          }
+          if (n % 50 === 0) {
+            index.commit();
+            index.begin();
+          }
+        }
+      } catch (e) {
+        console.error(`auto-scan ${d.id} failed:`, e);
+      }
+    }
+    index.endBulkRebuild();
+    index.close();
+    console.log(`auto-scan indexed ${n} sessions from ${detected.length} clients`);
+  } catch (e) {
+    console.error("auto-scan failed:", e);
+  }
+}
+
 app.whenReady().then(() => {
-  createWindow();
+  const win = createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
+  // 首窗就绪后自动探测+扫描；结果推给渲染层
+  win.webContents.once("did-finish-load", () => {
+    void autoScanInstalled().then(() => {
+      try {
+        const detected = discoverAll();
+        win.webContents.send("harbor:autoScanDone", {
+          installed: detected.filter((d) => d.installed).length,
+          clients: detected.filter((d) => d.installed).map((d) => d.id),
+        });
+      } catch {
+        /* ignore */
+      }
+    });
   });
 });
 

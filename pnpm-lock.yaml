@@ -22,6 +22,9 @@ importers:
       '@sessionharbor/adapter-codex':
         specifier: workspace:*
         version: link:../../packages/adapters/codex
+      '@sessionharbor/adapter-cursor':
+        specifier: workspace:*
+        version: link:../../packages/adapters/cursor
       '@sessionharbor/adapter-deepseek-harness':
         specifier: workspace:*
         version: link:../../packages/adapters/deepseek-harness
@@ -34,6 +37,9 @@ importers:
       '@sessionharbor/adapter-trae-solo':
         specifier: workspace:*
         version: link:../../packages/adapters/trae-solo
+      '@sessionharbor/adapter-vscode':
+        specifier: workspace:*
+        version: link:../../packages/adapters/vscode
       '@sessionharbor/adapter-workbuddy':
         specifier: workspace:*
         version: link:../../packages/adapters/workbuddy
@@ -103,6 +109,19 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/adapters/cursor:
+    dependencies:
+      '@sessionharbor/core':
+        specifier: workspace:*
+        version: link:../../core
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.4
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/adapters/deepseek-harness:
     dependencies:
       '@sessionharbor/core':
@@ -155,6 +174,19 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/adapters/vscode:
+    dependencies:
+      '@sessionharbor/core':
+        specifier: workspace:*
+        version: link:../../core
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.4
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/adapters/workbuddy:
     dependencies:
       '@sessionharbor/core':
@@ -182,6 +214,9 @@ importers:
       '@sessionharbor/adapter-codex':
         specifier: workspace:*
         version: link:../adapters/codex
+      '@sessionharbor/adapter-cursor':
+        specifier: workspace:*
+        version: link:../adapters/cursor
       '@sessionharbor/adapter-deepseek-harness':
         specifier: workspace:*
         version: link:../adapters/deepseek-harness
@@ -194,6 +229,9 @@ importers:
       '@sessionharbor/adapter-trae-solo':
         specifier: workspace:*
         version: link:../adapters/trae-solo
+      '@sessionharbor/adapter-vscode':
+        specifier: workspace:*
+        version: link:../adapters/vscode
       '@sessionharbor/adapter-workbuddy':
         specifier: workspace:*
         version: link:../adapters/workbuddy

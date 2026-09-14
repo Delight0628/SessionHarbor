@@ -50,6 +50,8 @@ import {
 } from "@sessionharbor/adapter-deepseek-harness";
 import { createDevinAdapter, discoverDevin } from "@sessionharbor/adapter-devin";
 import { createTraeSoloAdapter, discoverTrae } from "@sessionharbor/adapter-trae-solo";
+import { createCursorAdapter, discoverCursor } from "@sessionharbor/adapter-cursor";
+import { createVsCodeAdapter, discoverVsCode } from "@sessionharbor/adapter-vscode";
 import {
   createChatGptExportAdapter,
   discoverChatGptExport,
@@ -64,6 +66,8 @@ const CLIENTS = [
   "deepseek-harness",
   "devin",
   "trae-solo",
+  "cursor",
+  "vscode",
   "chatgpt-export",
 ] as const;
 type ClientId = (typeof CLIENTS)[number];
@@ -125,6 +129,10 @@ function getClientPaths(
       return discoverDevin(args["devin-db"] as string | undefined);
     case "trae-solo":
       return discoverTrae(args["trae-root"] as string | undefined);
+    case "cursor":
+      return discoverCursor(args["cursor-root"] as string | undefined);
+    case "vscode":
+      return discoverVsCode(args["vscode-root"] as string | undefined);
     case "chatgpt-export":
       return discoverChatGptExport(args["chatgpt-export"] as string | undefined);
   }
@@ -142,6 +150,8 @@ function getAdapter(
   if (id === "deepseek-harness") return createDeepseekHarnessAdapter(paths as never);
   if (id === "devin") return createDevinAdapter(paths as never);
   if (id === "trae-solo") return createTraeSoloAdapter(paths as never);
+  if (id === "cursor") return createCursorAdapter(paths as never);
+  if (id === "vscode") return createVsCodeAdapter(paths as never);
   if (id === "chatgpt-export") return createChatGptExportAdapter(paths as never);
   return createWorkbuddyAdapter(paths);
 }
@@ -169,7 +179,7 @@ function help(): void {
 
 用法:
   harbor info
-  harbor list --client alink|claude-code|workbuddy|codex|mimo|chatgpt-export [--json] [--title 关键字]
+  harbor list --client alink|claude-code|workbuddy|codex|mimo|cursor|vscode|trae-solo|chatgpt-export [--json] [--title 关键字]
   harbor scan [--client ...]          构建/刷新本地 FTS 索引
   harbor search <关键词> [--limit N]   统一全文检索
   harbor migrate --from A --to B [--title ...] [--id ...] [--dry-run] [--overwrite] [--yes]
@@ -194,6 +204,9 @@ function help(): void {
   --claude-projects   指定 ~/.claude/projects
   --wb-db PATH        指定 workbuddy.db
   --codex-root PATH   指定 ~/.codex
+  --cursor-root PATH  指定 Cursor 数据根（%APPDATA%/Cursor）
+  --vscode-root PATH  指定 VS Code 数据根（%APPDATA%/Code）
+  --trae-root PATH    指定 Trae 数据根
   --chatgpt-export    conversations.json 路径（只读导入）
 `);
 }

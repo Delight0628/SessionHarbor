@@ -2,6 +2,16 @@
 const $ = (s) => document.querySelector(s);
 const status = (t) => { $("#status").textContent = t; };
 
+function harborApi() {
+  if (!window.harbor || typeof window.harbor.discover !== "function") {
+    const err = new Error(
+      "preload 未注入（window.harbor 不可用）。请用 electron 启动本应用，不要直接打开 HTML。",
+    );
+    throw err;
+  }
+  return window.harbor;
+}
+
 let sessions = [];
 let activeId = null;
 let activeClient = null;
@@ -123,7 +133,7 @@ async function openSession(client, id) {
   activeGroup = found?.group || null;
   status(`读取 ${client} / ${id} …`);
   try {
-    const data = await window.harbor.read(client, id);
+    const data = await harborApi().read(client, id);
     const s = data.session;
     const parts = [
       toolbarHtml(client, id),
@@ -154,11 +164,11 @@ async function openSession(client, id) {
     }
     $("#viewer").innerHTML = parts.join("");
     $("#btnExportMd")?.addEventListener("click", async () => {
-      const r = await window.harbor.exportMd(client, id);
+      const r = await harborApi().exportMd(client, id);
       status(r.canceled ? "已取消导出" : `已导出 ${r.filePath}`);
     });
     $("#btnExportHtml")?.addEventListener("click", async () => {
-      const html = await window.harbor.exportHtml(client, id);
+      const html = await harborApi().exportHtml(client, id);
       const blob = new Blob([html], { type: "text/html" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -175,11 +185,17 @@ async function openSession(client, id) {
 
 async function loadList() {
   const client = $("#client").value;
+  if (!client) {
+    $("#list").innerHTML = '<div class="empty">未检测到本机已安装的客户端数据目录</div>';
+    $("#listSrc").textContent = "-";
+    status("无可用客户端");
+    return;
+  }
   $("#listSrc").textContent = client;
   const kw = $("#filter").value.trim();
   status(`加载 ${client} 列表…`);
   try {
-    sessions = await window.harbor.list(client, kw ? { titles: [kw] } : undefined);
+    sessions = await harborApi().list(client, kw ? { titles: [kw] } : undefined);
     renderList(sessions);
     status(`${client}: ${sessions.length} 个会话`);
   } catch (e) {
@@ -192,7 +208,13 @@ async function doSearch() {
   const q = $("#query").value.trim();
   if (!q) return;
   status(`搜索「${q}」…`);
-  const res = await window.harbor.search(q, 30);
+  let res;
+  try {
+    res = await harborApi().search(q, 30);
+  } catch (e) {
+    status(`搜索失败: ${e.message || e}`);
+    return;
+  }
   if (res.error) {
     status(res.error);
     return;
@@ -213,7 +235,7 @@ async function doScan() {
   status("扫描索引中，请稍候…");
   $("#btnScan").disabled = true;
   try {
-    const r = await window.harbor.scan("all");
+    const r = await harborApi().scan("all");
     status(`索引完成 ${r.indexed} 条 / 总库 ${r.total} · ${r.ms}ms → ${r.indexPath}`);
   } catch (e) {
     status(`扫描失败: ${e.message || e}`);
@@ -224,13 +246,13 @@ async function doScan() {
 
 async function toggleWatch() {
   if (!watching) {
-    await window.harbor.watchStart();
+    await harborApi().watchStart();
     watching = true;
     $("#btnWatch").classList.add("on");
     $("#btnWatch").textContent = "监听中";
     status("增量 watcher 已启动，客户端文件变更会自动刷新索引");
   } else {
-    await window.harbor.watchStop();
+    await harborApi().watchStop();
     watching = false;
     $("#btnWatch").classList.remove("on");
     $("#btnWatch").textContent = "监听";
@@ -261,7 +283,7 @@ async function doMigrate() {
   status(dry ? "dry-run…" : "迁移中…");
   $("#btnMigrate").disabled = true;
   try {
-    const r = await window.harbor.migrate({
+    const r = await harborApi().migrate({
       from: activeClient,
       to,
       ids: [activeId],
@@ -291,7 +313,7 @@ async function doMigrate() {
 
 async function refreshClients() {
   try {
-    const list = await window.harbor.discover();
+    const list = await harborApi().discover();
     // 徽章：只显示已安装
     $("#clients").innerHTML = list
       .filter((c) => c.installed || c.ok)
@@ -302,30 +324,35 @@ async function refreshClients() {
       })
       .join("");
 
-    // 下拉框：只保留已检测到的客户端
+    // 下拉框：只保留本机已检测到的客户端（未安装不得出现）
     const installed = list.filter((c) => (c.installed ?? c.ok) && c.canWrite !== false);
     const readInstalled = list.filter((c) => c.installed ?? c.ok);
     const src = $("#client");
     const dst = $("#migrateTo");
     const prevSrc = src.value;
     const prevDst = dst.value;
-    src.innerHTML = readInstalled
-      .map((c) => `<option value="${c.id}">${escapeHtml(c.displayName || c.id)}</option>`)
-      .join("");
-    if (!src.innerHTML) src.innerHTML = '<option value="">（未检测到客户端）</option>';
+    src.innerHTML = readInstalled.length
+      ? readInstalled
+          .map((c) => `<option value="${c.id}">${escapeHtml(c.displayName || c.id)}</option>`)
+          .join("")
+      : '<option value="">（未检测到客户端）</option>';
     if ([...src.options].some((o) => o.value === prevSrc)) src.value = prevSrc;
 
     dst.innerHTML =
       '<option value="">迁移到…</option>' +
-      installed
-        .map((c) => `<option value="${c.id}">${escapeHtml(c.displayName || c.id)}</option>`)
-        .join("");
+      (installed.length
+        ? installed
+            .map((c) => `<option value="${c.id}">${escapeHtml(c.displayName || c.id)}</option>`)
+            .join("")
+        : "");
     if ([...dst.options].some((o) => o.value === prevDst)) dst.value = prevDst;
 
     const n = readInstalled.length;
     status(`已自动检测本机 ${n} 个客户端可解析会话库`);
     return list;
-  } catch {
+  } catch (e) {
+    status(`客户端探测失败: ${e.message || e}`);
+    $("#client").innerHTML = '<option value="">（preload 未注入）</option>';
     return [];
   }
 }
@@ -362,7 +389,7 @@ async function doSync(direction = "push") {
   $("#btnSync").disabled = true;
   $("#btnPull").disabled = true;
   try {
-    const r = await window.harbor.sync({ ...opts, dryRun: dry });
+    const r = await harborApi().sync({ ...opts, dryRun: dry });
     status(
       `${label}: 上传 ${r.report.uploaded} 下载 ${r.report.downloaded} 跳过 ${r.report.skipped} 失败 ${r.report.failed}`,
     );
@@ -388,5 +415,20 @@ $("#btnPull").addEventListener("click", () => doSync("pull"));
 $("#filter").addEventListener("keydown", (e) => e.key === "Enter" && loadList());
 $("#query").addEventListener("keydown", (e) => e.key === "Enter" && doSearch());
 $("#client").addEventListener("change", loadList);
+
+// 主进程自动扫描完成后刷新
+try {
+  if (window.harbor?.onAutoScanDone) {
+    window.harbor.onAutoScanDone((payload) => {
+      status(
+        `启动自动扫描完成：已索引 ${payload?.installed ?? 0} 个客户端` +
+          (payload?.clients?.length ? `（${payload.clients.join("、")}）` : ""),
+      );
+      void loadList();
+    });
+  }
+} catch {
+  /* ignore */
+}
 
 refreshClients().then(loadList);

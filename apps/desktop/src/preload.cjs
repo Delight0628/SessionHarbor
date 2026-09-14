@@ -13,4 +13,13 @@ contextBridge.exposeInMainWorld("harbor", {
   watchStart: () => ipcRenderer.invoke("harbor:watchStart"),
   watchStop: () => ipcRenderer.invoke("harbor:watchStop"),
   sync: (opts) => ipcRenderer.invoke("harbor:sync", opts),
+  onAutoScanDone: (cb) => {
+    ipcRenderer.on("harbor:autoScanDone", (_e, payload) => {
+      try {
+        cb(payload);
+      } catch {
+        /* ignore */
+      }
+    });
+  },
 });

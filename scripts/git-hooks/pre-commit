@@ -1,0 +1,51 @@
+#!/bin/sh
+# SessionHarbor pre-commit：功能/修复涉及桌面端或核心逻辑时，自动重建根目录 SessionHarbor.exe
+# 触发条件（任一）：
+#   - apps/desktop/**
+#   - packages/**
+#   - scripts/pack-desktop.mjs
+#   - package.json / pnpm-lock.yaml / pnpm-workspace.yaml
+# 跳过：HARBOR_SKIP_PACK=1（调试用）
+
+set -e
+
+if [ "${HARBOR_SKIP_PACK}" = "1" ]; then
+  echo "[pre-commit] HARBOR_SKIP_PACK=1，跳过 exe 重建"
+  exit 0
+fi
+
+# 仅在相关文件被暂存时触发
+TRIGGERED=$(git diff --cached --name-only | grep -E '^(apps/desktop/|packages/|scripts/pack-desktop\.mjs$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$)' || true)
+
+if [ -z "$TRIGGERED" ]; then
+  echo "[pre-commit] 未改动桌面/核心相关文件，跳过 exe 重建"
+  exit 0
+fi
+
+echo "[pre-commit] 检测到功能/修复相关变更，开始重建 SessionHarbor.exe..."
+echo "$TRIGGERED" | sed 's/^/  - /'
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# 避免递归触发
+export HARBOR_SKIP_PACK=1
+
+if command -v pnpm >/dev/null 2>&1; then
+  pnpm pack:exe
+elif command -v node >/dev/null 2>&1; then
+  node scripts/pack-desktop.mjs
+else
+  echo "[pre-commit] 错误: 未找到 pnpm/node，无法打包" >&2
+  exit 1
+fi
+
+if [ ! -f "SessionHarbor.exe" ]; then
+  echo "[pre-commit] 错误: 未生成 SessionHarbor.exe" >&2
+  exit 1
+fi
+
+git add SessionHarbor.exe
+SIZE=$(wc -c < SessionHarbor.exe | tr -d ' ')
+echo "[pre-commit] 已重建并暂存 SessionHarbor.exe (${SIZE} bytes)"
+exit 0

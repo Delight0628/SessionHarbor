@@ -15,9 +15,16 @@
     "build:desktop": "pnpm --filter @sessionharbor/desktop build",
     "harbor": "node packages/cli/dist/bin.js",
     "desktop": "pnpm --filter @sessionharbor/desktop start",
+    "pack:exe": "node scripts/pack-desktop.mjs",
+    "hooks:install": "node scripts/install-git-hooks.mjs",
     "bench": "node scripts/bench-index.mjs",
     "e2e": "node scripts/e2e.mjs",
     "unit": "pnpm --filter @sessionharbor/core test",
     "test": "pnpm unit && pnpm e2e"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2"
   }
 }

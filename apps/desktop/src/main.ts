@@ -1,7 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   SessionIndex,
   SessionWatcher,
@@ -44,7 +43,30 @@ import {
   discoverChatGptExport,
 } from "@sessionharbor/adapter-chatgpt-export";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/**
+ * 应用资源根目录：
+ * - 打包后: .../resources/app.asar
+ * - 开发时: apps/desktop
+ * 不用 import.meta/__dirname，兼容 tsc ESM 与 esbuild CJS 打包。
+ */
+function appRoot(): string {
+  try {
+    const p = app.getAppPath();
+    if (p) return p;
+  } catch {
+    /* app 未就绪时 */
+  }
+  // 回退：相对 cwd 或已知布局
+  const candidates = [
+    process.cwd(),
+    path.join(process.cwd(), "apps", "desktop"),
+    path.dirname(path.dirname(process.argv[1] || "")),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(path.join(c, "package.json"))) return c;
+  }
+  return process.cwd();
+}
 const WORKDIR = process.env.HARBOR_WORKDIR || process.cwd();
 
 type ClientId =
@@ -194,12 +216,13 @@ function getAdapter(id: ClientId) {
 }
 
 function resolvePreload(): string {
-  // tsc 输出在 dist/，preload.cjs 在 src/；构建后也会拷贝到 dist/
+  const root = appRoot();
   const candidates = [
-    path.join(__dirname, "preload.cjs"),
-    path.join(__dirname, "../src/preload.cjs"),
+    path.join(root, "dist", "preload.cjs"),
+    path.join(root, "src", "preload.cjs"),
     path.join(process.cwd(), "src/preload.cjs"),
     path.join(process.cwd(), "apps/desktop/src/preload.cjs"),
+    path.join(process.cwd(), "apps/desktop/dist/preload.cjs"),
   ];
   for (const p of candidates) {
     if (fs.existsSync(p)) return p;
@@ -219,7 +242,8 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
-  win.loadFile(path.join(__dirname, "../renderer/index.html"));
+  const root = appRoot();
+  win.loadFile(path.join(root, "renderer", "index.html"));
   return win;
 }
 

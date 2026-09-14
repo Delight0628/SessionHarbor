@@ -1,0 +1,9 @@
+#!/bin/sh
+# SessionHarbor post-commit：提示 exe 版本与提交对应关系（不重复打包，避免双次构建）
+COMMIT=$(git rev-parse --short HEAD)
+if [ -f "SessionHarbor.exe" ]; then
+  echo "[post-commit] SessionHarbor.exe 已与提交 ${COMMIT} 同步（由 pre-commit 重建）"
+else
+  echo "[post-commit] 警告: 根目录缺少 SessionHarbor.exe，请运行 pnpm pack:exe"
+fi
+exit 0

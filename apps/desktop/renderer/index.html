@@ -45,11 +45,35 @@
       border-bottom: 1px solid var(--border); display: flex; justify-content: space-between;
     }
     .list { overflow: auto; flex: 1; }
-    .item { padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+    .group { border-bottom: 1px solid var(--border); }
+    .group-head {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 10px; cursor: pointer; user-select: none;
+      font-weight: 600; font-size: 13px; color: var(--text);
+      background: #12171e;
+    }
+    .group-head:hover { background: #1c2128; }
+    .group-head .folder { color: var(--accent); font-size: 12px; }
+    .group-head .name {
+      flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .group-head .count {
+      color: var(--muted); font-weight: 400; font-size: 11px;
+    }
+    .group-head .chev { color: var(--muted); font-size: 10px; width: 12px; }
+    .group-body { display: block; }
+    .group.collapsed .group-body { display: none; }
+    .group.collapsed .group-head .chev { transform: rotate(-90deg); }
+    .item { padding: 8px 12px 8px 28px; border-bottom: 1px solid transparent; cursor: pointer; }
     .item:hover { background: #1c2128; }
     .item.active { background: #1f6feb33; border-left: 3px solid var(--accent); }
-    .item .t { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .item .m { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .item .t { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+    .item .m { color: var(--muted); font-size: 11px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .more {
+      padding: 4px 12px 8px 28px; font-size: 12px; color: var(--accent); cursor: pointer;
+    }
+    .more:hover { text-decoration: underline; }
+    .flat-note { padding: 6px 12px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--border); }
     section.viewer { overflow: auto; padding: 16px 20px; }
     .viewer-toolbar {
       display: flex; gap: 8px; margin-bottom: 12px; position: sticky; top: 0;

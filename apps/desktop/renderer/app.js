@@ -20,6 +20,26 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
+function bindItems(root) {
+  root.querySelectorAll(".item").forEach((node) => {
+    node.addEventListener("click", () => {
+      root.querySelectorAll(".item").forEach((n) => n.classList.remove("active"));
+      node.classList.add("active");
+      openSession(node.dataset.client, node.dataset.id);
+    });
+  });
+}
+
+function itemHtml(s) {
+  return `
+    <div class="item" data-client="${s.client}" data-id="${s.id}">
+      <div class="t">${escapeHtml(s.title || s.id)}</div>
+      <div class="m">${fmtTs(s.updatedAtMs || s.createdAtMs)} · ${s.messageCount ?? "-"} 条</div>
+    </div>`;
+}
+
+const GROUP_PREVIEW = 5;
+
 function renderList(items) {
   const el = $("#list");
   $("#listCount").textContent = `${items.length} 个会话`;
@@ -27,22 +47,63 @@ function renderList(items) {
     el.innerHTML = '<div class="empty">无结果</div>';
     return;
   }
-  el.innerHTML = items
-    .map(
-      (s) => `
-    <div class="item" data-client="${s.client}" data-id="${s.id}">
-      <div class="t">[${s.client}] ${escapeHtml(s.title || s.id)}</div>
-      <div class="m">${fmtTs(s.updatedAtMs || s.createdAtMs)} · ${s.messageCount ?? "-"} 条${s.group ? " · " + escapeHtml(s.group) : ""}</div>
-    </div>`,
-    )
+
+  // 按 group（cwd 目录名 / project）分组；无 group 归入「未分组」
+  const map = new Map();
+  for (const s of items) {
+    const g = (s.group || "").trim() || "未分组";
+    const list = map.get(g) ?? [];
+    list.push(s);
+    map.set(g, list);
+  }
+  // 组按最新会话时间排序
+  const groups = [...map.entries()].sort((a, b) => {
+    const ta = Math.max(...a[1].map((x) => x.updatedAtMs || x.createdAtMs || 0));
+    const tb = Math.max(...b[1].map((x) => x.updatedAtMs || x.createdAtMs || 0));
+    return tb - ta;
+  });
+
+  el.innerHTML = groups
+    .map(([name, list], gi) => {
+      const preview = list.slice(0, GROUP_PREVIEW);
+      const rest = list.length - preview.length;
+      return `
+      <section class="group" data-group="${escapeHtml(name)}">
+        <div class="group-head" data-gi="${gi}">
+          <span class="chev">▼</span>
+          <span class="folder">📁</span>
+          <span class="name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+          <span class="count">${list.length}</span>
+        </div>
+        <div class="group-body">
+          ${preview.map(itemHtml).join("")}
+          ${rest > 0 ? `<div class="more" data-gi="${gi}" data-rest="${rest}">显示更多 ${rest} 条</div>` : ""}
+        </div>
+      </section>`;
+    })
     .join("");
-  el.querySelectorAll(".item").forEach((node) => {
-    node.addEventListener("click", () => {
-      el.querySelectorAll(".item").forEach((n) => n.classList.remove("active"));
-      node.classList.add("active");
-      openSession(node.dataset.client, node.dataset.id);
+
+  // 折叠/展开
+  el.querySelectorAll(".group-head").forEach((head) => {
+    head.addEventListener("click", () => {
+      head.closest(".group")?.classList.toggle("collapsed");
     });
   });
+
+  // 显示更多：展开该组全部
+  el.querySelectorAll(".more").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const gi = Number(btn.dataset.gi);
+      const [, list] = groups[gi];
+      const section = btn.closest(".group");
+      const body = section.querySelector(".group-body");
+      body.innerHTML = list.map(itemHtml).join("");
+      bindItems(body);
+    });
+  });
+
+  bindItems(el);
 }
 
 function toolbarHtml(client, id) {
@@ -138,6 +199,7 @@ async function doSearch() {
     client: h.sourceClient,
     title: h.title,
     messageCount: undefined,
+    group: h.sourceClient,
   }));
   $("#listSrc").textContent = "search";
   renderList(items);

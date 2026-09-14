@@ -18,8 +18,26 @@
 | 脱敏扫描 + tool 配对统计 | ✅ 挂在 migrate 报告与 `harbor secrets` |
 | 去重/分叉检测 | ✅ `harbor dedup` |
 | ADR-001 node:sqlite / ADR-002 E2EE / 团队库 / 内网部署 | ✅ 设计稿 |
-| Electron GUI（含折叠 tool/thinking） | ✅ |
-| 打包分发 electron-builder | 未做 |
+| Electron GUI（含折叠 tool/thinking、分组侧栏、推送/拉取云） | ✅ |
+| 云同步（push/pull · BYO 目录/WebDAV 免费 · 托管云订阅制） | ✅ 客户端闭环；托管云服务端待 M3 |
+
+## 盈利模式（Obsidian 式）
+
+| 层 | 价格 | 内容 |
+|---|---|---|
+| **本地层** | 永久免费 | 聚合、统一搜索、互迁、导出、分支 |
+| **BYO 云** | 免费 | 自备网盘同步盘 / WebDAV，E2EE 推送+拉取 |
+| **托管云 Free** | $0 | 50 会话 / 100MB |
+| **托管云 Pro** | $5-8/月 | 1 万会话 / 20GB + Web 阅读端 + 优先同步 |
+| **托管云 Team** | 按席位 | 团队会话库 + 审计 + 企业 SSO |
+
+```powershell
+harbor pricing          # 查看套餐说明
+# 另一台电脑下载：
+harbor sync pull session --id <id> --passphrase <同密钥> --cloud-root <同一网盘目录>
+# 或 --webdav https://dav.example.com --webdav-user u --webdav-password p
+# 可选写回客户端：--restore-to alink
+```
 
 ## 文档
 

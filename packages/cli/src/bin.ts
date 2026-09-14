@@ -27,9 +27,14 @@ import {
   analyzeDedup,
   formatDedupSummary,
   syncToCloud,
+  pushToCloud,
+  pullFromCloud,
   formatSyncResult,
   loadOrCreateSyncConfig,
+  resolveTarget,
   listCloudSessions,
+  formatPricing,
+  planDisplay,
   type ClientPathsLike,
   type FilterSpec,
 } from "@sessionharbor/core";
@@ -172,9 +177,11 @@ function help(): void {
   harbor watch [--client A] [--debounce ms]   增量监听并刷新索引
   harbor secrets --client A [--id ...] [--limit N]   敏感信息扫描
   harbor dedup [--client A] [--limit N]               去重与分叉检测
-  harbor sync [client|group|session|all] [--client A] [--group G] [--id S]
-             [--cloud-root DIR] [--dry-run] [--list-cloud]
-             按来源/项目/单条同步到云目录（AES-256-GCM）
+  harbor sync [push|pull] [client|group|session|all] [--client A] [--group G] [--id S]
+             [--cloud-root DIR] [--webdav URL --webdav-user U --webdav-password P]
+             [--restore-to CLIENT] [--passphrase K] [--dry-run] [--list-cloud]
+             同步：BYO 网盘/WebDAV 免费；托管云需订阅（见 harbor pricing）
+  harbor pricing              查看套餐与盈利模式说明
 
 全局选项:
   --workdir DIR       备份/日志/索引目录（默认 cwd）
@@ -577,11 +584,17 @@ async function cmdDedup(args: Record<string, string | boolean | string[]>): Prom
 async function cmdSync(args: Record<string, string | boolean | string[]>, positional: string[]): Promise<number> {
   const wd = workdir(args);
   const cfg = loadOrCreateSyncConfig(wd);
-  const root = path.resolve(
-    String(args["cloud-root"] ?? path.join(wd, ".sessionharbor", "cloud")),
-  );
   const passphrase = String(args.passphrase ?? cfg.passphrase);
-  const scopeArg = String(args.scope ?? positional[0] ?? "").toLowerCase();
+  const dir = String(args.direction ?? positional[0] ?? "push").toLowerCase();
+  const direction: "push" | "pull" = dir === "pull" || dir === "download" ? "pull" : "push";
+
+  // 范围：位置参数可能是 scope 或方向
+  const pos0 = String(positional[0] ?? "").toLowerCase();
+  const pos1 = String(positional[1] ?? "").toLowerCase();
+  let scopeArg = String(args.scope ?? "").toLowerCase();
+  if (["client", "group", "session", "all"].includes(pos0)) scopeArg = pos0;
+  if (["client", "group", "session", "all"].includes(pos1)) scopeArg = pos1;
+
   let scope: "client" | "group" | "session" | "all" = "all";
   if (scopeArg === "client" || args.client) scope = "client";
   if (scopeArg === "group" || args.group) scope = "group";
@@ -595,30 +608,77 @@ async function cmdSync(args: Record<string, string | boolean | string[]>, positi
     sessionId: Array.isArray(args.id) ? String(args.id[0]) : args.id ? String(args.id) : undefined,
   };
 
+  const target = resolveTarget(
+    {
+      ...cfg,
+      targetKind: args["webdav"] || cfg.targetKind === "webdav" ? "webdav" : "directory",
+      cloudRoot: args["cloud-root"] ? String(args["cloud-root"]) : cfg.cloudRoot,
+      webdavUrl: args["webdav"] ? String(args["webdav"]) : cfg.webdavUrl,
+      webdavUser: args["webdav-user"] ? String(args["webdav-user"]) : cfg.webdavUser,
+      webdavPassword: args["webdav-password"] ? String(args["webdav-password"]) : cfg.webdavPassword,
+    },
+    wd,
+    args["cloud-root"] ? String(args["cloud-root"]) : undefined,
+  );
+
+  const dryRun = Boolean(args["dry-run"]);
+
+  if (direction === "pull") {
+    let restoreTo;
+    if (args["restore-to"]) {
+      restoreTo = getAdapter(String(args["restore-to"]) as ClientId, args);
+    }
+    const report = await pullFromCloud({
+      target,
+      filter,
+      passphrase,
+      workdir: wd,
+      restoreTo,
+      overwrite: Boolean(args.overwrite),
+      dryRun,
+    });
+    console.log(formatSyncResult(report));
+    if (args["list-cloud"]) {
+      const entries = listCloudSessions(
+        target.kind === "directory" ? target.root : path.join(wd, ".sessionharbor", "cloud"),
+      );
+      console.log(`\n清单缓存 ${entries.length} 条`);
+    }
+    return report.failed ? 1 : 0;
+  }
+
+  // push
   const adapters = [];
   for (const id of CLIENTS) {
     try {
       adapters.push(getAdapter(id, args));
     } catch {
-      /* skip not installed */
+      /* skip */
     }
   }
-
-  const report = await syncToCloud({
+  const report = await pushToCloud({
     adapters,
-    target: { kind: "directory", root },
+    target,
     filter,
     passphrase,
     workdir: wd,
-    dryRun: Boolean(args["dry-run"]),
+    dryRun,
   });
   console.log(formatSyncResult(report));
-  console.log(`\n云目录: ${root}`);
+  const targetLabel =
+    target.kind === "directory" ? target.root : target.kind === "webdav" ? target.baseUrl : target.endpoint;
+  console.log(`\n云端后端: ${targetLabel}`);
+  console.log("另一台电脑: 安装 SessionHarbor 后执行");
+  console.log(`  harbor sync pull session --id <id> --passphrase <同密钥> ${args["cloud-root"] ? "--cloud-root " + args["cloud-root"] : ""}`);
+  console.log("  # 或配置同一 WebDAV: --webdav https://... --webdav-user u --webdav-password p");
+  console.log("  # 可选写回客户端: --restore-to alink");
   if (args["list-cloud"]) {
-    const entries = listCloudSessions(root);
-    console.log(`云端清单 ${entries.length} 条:`);
-    for (const e of entries.slice(0, 30)) {
-      console.log(`  [${e.sourceClient}] ${e.group || "-"} ${e.title} → ${e.path}`);
+    const entries = listCloudSessions(
+      target.kind === "directory" ? target.root : path.join(wd, ".sessionharbor", "cloud"),
+    );
+    console.log(`\n云端清单 ${entries.length} 条:`);
+    for (const e of entries.slice(0, 20)) {
+      console.log(`  [${e.sourceClient}] ${e.group || "-"} ${e.title}`);
     }
   }
   return report.failed ? 1 : 0;
@@ -661,6 +721,10 @@ async function main(): Promise<void> {
         break;
       case "sync":
         process.exit(await cmdSync(args, positional.slice(1)));
+        break;
+      case "pricing":
+        console.log(formatPricing());
+        process.exit(0);
         break;
       case "help":
       case "--help":

@@ -330,9 +330,9 @@ async function refreshClients() {
   }
 }
 
-async function doSync() {
+async function doSync(direction = "push") {
   const scope = $("#syncScope").value;
-  const opts = { scope };
+  const opts = { scope, direction };
   if (scope === "client") {
     if (!$("#client").value) {
       status("请先选择来源客户端");
@@ -354,28 +354,27 @@ async function doSync() {
     opts.sessionId = activeId;
     opts.client = activeClient;
   }
+  const label = direction === "pull" ? "从云拉取" : "推送到云";
   const dry = !confirm(
-    `同步范围：${scope}${opts.group ? " / " + opts.group : ""}${opts.sessionId ? " / 单条" : ""}\n\n确定 = 真实上传（AES-256-GCM 加密）\n取消 = dry-run 预览`,
+    `${label} · 范围 ${scope}${opts.group ? " / " + opts.group : ""}\n\n确定 = 真实执行\n取消 = dry-run`,
   );
-  status(dry ? "同步预览…" : "同步中…");
+  status(`${label}…`);
   $("#btnSync").disabled = true;
+  $("#btnPull").disabled = true;
   try {
     const r = await window.harbor.sync({ ...opts, dryRun: dry });
-    if (r?.error) {
-      status(r.error);
-      return;
-    }
     status(
-      `同步: 上传 ${r.report.uploaded} 跳过 ${r.report.skipped} 失败 ${r.report.failed} · 云端 ${r.cloudCount} 条 · ${r.cloudRoot}`,
+      `${label}: 上传 ${r.report.uploaded} 下载 ${r.report.downloaded} 跳过 ${r.report.skipped} 失败 ${r.report.failed}`,
     );
     $("#viewer").insertAdjacentHTML(
       "afterbegin",
-      `<div class="msg"><div class="hd">云同步报告</div><pre>${escapeHtml(r.text)}</pre></div>`,
+      `<div class="msg"><div class="hd">云同步报告 (${r.direction})</div><pre>${escapeHtml(r.text)}\n\n云端: ${escapeHtml(r.cloudRoot || "")}</pre></div>`,
     );
   } catch (e) {
-    status(`同步失败: ${e.message || e}`);
+    status(`${label}失败: ${e.message || e}`);
   } finally {
     $("#btnSync").disabled = false;
+    $("#btnPull").disabled = false;
   }
 }
 
@@ -384,7 +383,8 @@ $("#btnSearch").addEventListener("click", doSearch);
 $("#btnScan").addEventListener("click", doScan);
 $("#btnWatch").addEventListener("click", toggleWatch);
 $("#btnMigrate").addEventListener("click", doMigrate);
-$("#btnSync").addEventListener("click", doSync);
+$("#btnSync").addEventListener("click", () => doSync("push"));
+$("#btnPull").addEventListener("click", () => doSync("pull"));
 $("#filter").addEventListener("keydown", (e) => e.key === "Enter" && loadList());
 $("#query").addEventListener("keydown", (e) => e.key === "Enter" && doSearch());
 $("#client").addEventListener("change", loadList);

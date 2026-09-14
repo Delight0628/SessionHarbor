@@ -15,9 +15,14 @@ import {
   toMarkdown,
   watchDirsFor,
   syncToCloud,
+  pushToCloud,
+  pullFromCloud,
   formatSyncResult,
   loadOrCreateSyncConfig,
+  resolveTarget,
   listCloudSessions,
+  planDisplay,
+  formatPricing,
   type ClientPathsLike,
   type FilterSpec,
 } from "@sessionharbor/core";
@@ -390,18 +395,49 @@ ipcMain.handle(
   async (
     _e,
     opts: {
+      direction?: "push" | "pull";
       scope: "client" | "group" | "session" | "all";
       client?: string;
       group?: string;
       sessionId?: string;
       cloudRoot?: string;
+      restoreTo?: ClientId;
+      overwrite?: boolean;
       dryRun?: boolean;
     },
   ) => {
     const cfg = loadOrCreateSyncConfig(WORKDIR);
-    const root = path.resolve(
-      opts.cloudRoot || path.join(WORKDIR, ".sessionharbor", "cloud"),
-    );
+    const target = resolveTarget(cfg, WORKDIR, opts.cloudRoot);
+    const targetLabel =
+      target.kind === "directory"
+        ? target.root
+        : target.kind === "webdav"
+          ? target.baseUrl
+          : target.endpoint;
+    const filter = {
+      scope: opts.scope,
+      client: opts.client,
+      group: opts.group,
+      sessionId: opts.sessionId,
+    };
+    if (opts.direction === "pull") {
+      const restoreTo = opts.restoreTo ? getAdapter(opts.restoreTo) : undefined;
+      const report = await pullFromCloud({
+        target,
+        filter,
+        passphrase: cfg.passphrase,
+        workdir: WORKDIR,
+        restoreTo,
+        overwrite: opts.overwrite,
+        dryRun: opts.dryRun,
+      });
+      return {
+        report,
+        text: formatSyncResult(report),
+        cloudRoot: targetLabel,
+        direction: "pull",
+      };
+    }
     const adapters = [];
     for (const id of CLIENTS) {
       try {
@@ -410,24 +446,21 @@ ipcMain.handle(
         /* skip */
       }
     }
-    const report = await syncToCloud({
+    const report = await pushToCloud({
       adapters,
-      target: { kind: "directory", root },
-      filter: {
-        scope: opts.scope,
-        client: opts.client,
-        group: opts.group,
-        sessionId: opts.sessionId,
-      },
+      target,
+      filter,
       passphrase: cfg.passphrase,
       workdir: WORKDIR,
       dryRun: opts.dryRun,
+      license: cfg.license,
     });
     return {
       report,
       text: formatSyncResult(report),
-      cloudRoot: root,
-      cloudCount: listCloudSessions(root).length,
+      cloudRoot: targetLabel,
+      direction: "push",
+      plan: planDisplay(cfg.license),
     };
   },
 );

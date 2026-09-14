@@ -23,6 +23,12 @@ import { createWorkbuddyAdapter } from "@sessionharbor/adapter-workbuddy";
 import { createCodexAdapter, discoverCodex } from "@sessionharbor/adapter-codex";
 import { createMimoAdapter, discoverMimo } from "@sessionharbor/adapter-mimo";
 import {
+  createDeepseekHarnessAdapter,
+  discoverDsh,
+} from "@sessionharbor/adapter-deepseek-harness";
+import { createDevinAdapter, discoverDevin } from "@sessionharbor/adapter-devin";
+import { createTraeSoloAdapter, discoverTrae } from "@sessionharbor/adapter-trae-solo";
+import {
   createChatGptExportAdapter,
   discoverChatGptExport,
 } from "@sessionharbor/adapter-chatgpt-export";
@@ -30,8 +36,27 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WORKDIR = process.env.HARBOR_WORKDIR || process.cwd();
 
-type ClientId = "alink" | "claude-code" | "workbuddy" | "codex" | "mimo" | "chatgpt-export";
-const CLIENTS: ClientId[] = ["alink", "claude-code", "workbuddy", "codex", "mimo", "chatgpt-export"];
+type ClientId =
+  | "alink"
+  | "claude-code"
+  | "workbuddy"
+  | "codex"
+  | "mimo"
+  | "deepseek-harness"
+  | "devin"
+  | "trae-solo"
+  | "chatgpt-export";
+const CLIENTS: ClientId[] = [
+  "alink",
+  "claude-code",
+  "workbuddy",
+  "codex",
+  "mimo",
+  "deepseek-harness",
+  "devin",
+  "trae-solo",
+  "chatgpt-export",
+];
 
 const CLIENT_META: Array<{
   id: ClientId;
@@ -44,6 +69,24 @@ const CLIENT_META: Array<{
   { id: "workbuddy", displayName: "WorkBuddy", discover: () => discoverWorkbuddy() },
   { id: "codex", displayName: "Codex", discover: () => discoverCodex() },
   { id: "mimo", displayName: "MiMo Desktop", discover: () => discoverMimo() },
+  {
+    id: "deepseek-harness",
+    displayName: "DeepSeek Harness",
+    discover: () => discoverDsh(),
+    canWrite: false,
+  },
+  {
+    id: "devin",
+    displayName: "Devin",
+    discover: () => discoverDevin(),
+    canWrite: false,
+  },
+  {
+    id: "trae-solo",
+    displayName: "TRAE SOLO CN",
+    discover: () => discoverTrae(),
+    canWrite: false,
+  },
   {
     id: "chatgpt-export",
     displayName: "ChatGPT Export",
@@ -102,6 +145,12 @@ function getAdapter(id: ClientId) {
       return createCodexAdapter(paths as never);
     case "mimo":
       return createMimoAdapter(paths);
+    case "deepseek-harness":
+      return createDeepseekHarnessAdapter(paths as never);
+    case "devin":
+      return createDevinAdapter(paths as never);
+    case "trae-solo":
+      return createTraeSoloAdapter(paths as never);
     case "chatgpt-export":
       return createChatGptExportAdapter(paths as never);
   }

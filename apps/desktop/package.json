@@ -13,7 +13,10 @@
     "@sessionharbor/adapter-chatgpt-export": "workspace:*",
     "@sessionharbor/adapter-claude-code": "workspace:*",
     "@sessionharbor/adapter-codex": "workspace:*",
+    "@sessionharbor/adapter-deepseek-harness": "workspace:*",
+    "@sessionharbor/adapter-devin": "workspace:*",
     "@sessionharbor/adapter-mimo": "workspace:*",
+    "@sessionharbor/adapter-trae-solo": "workspace:*",
     "@sessionharbor/adapter-workbuddy": "workspace:*",
     "@sessionharbor/core": "workspace:*"
   },

@@ -1,0 +1,22 @@
+{
+  "name": "sessionharbor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SessionHarbor — 跨 AI 客户端会话统一管理、检索与互迁",
+  "packageManager": "pnpm@11.15.1",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "build:core": "pnpm --filter @sessionharbor/core build",
+    "build:adapters": "pnpm --filter \"@sessionharbor/adapter-*\" build",
+    "build:cli": "pnpm --filter @sessionharbor/cli build",
+    "build:desktop": "pnpm --filter @sessionharbor/desktop build",
+    "harbor": "node packages/cli/dist/bin.js",
+    "desktop": "pnpm --filter @sessionharbor/desktop start",
+    "bench": "node scripts/bench-index.mjs",
+    "e2e": "node scripts/m0-e2e.mjs",
+    "test": "pnpm e2e && pnpm bench"
+  }
+}

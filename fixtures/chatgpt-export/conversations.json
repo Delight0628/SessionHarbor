@@ -1,0 +1,117 @@
+[
+  {
+    "title": "SessionHarbor 需求讨论",
+    "create_time": 1757000000.0,
+    "update_time": 1757003600.0,
+    "conversation_id": "11111111-2222-3333-4444-555555555555",
+    "default_model_slug": "gpt-5",
+    "mapping": {
+      "root": {
+        "id": "root",
+        "message": null,
+        "parent": null,
+        "children": ["aaa", "bbb"]
+      },
+      "aaa": {
+        "id": "aaa",
+        "parent": "root",
+        "children": ["ccc"],
+        "message": {
+          "id": "aaa",
+          "author": { "role": "user" },
+          "content": { "content_type": "text", "parts": ["帮我设计一个跨客户端会话迁移工具的核心架构"] },
+          "create_time": 1757000100.0,
+          "status": "finished_successfully"
+        }
+      },
+      "bbb": {
+        "id": "bbb",
+        "parent": "root",
+        "children": [],
+        "message": {
+          "id": "bbb",
+          "author": { "role": "system" },
+          "content": { "content_type": "text", "parts": ["hidden system"] },
+          "create_time": 1757000090.0
+        }
+      },
+      "ccc": {
+        "id": "ccc",
+        "parent": "aaa",
+        "children": ["ddd"],
+        "message": {
+          "id": "ccc",
+          "author": { "role": "assistant" },
+          "content": {
+            "content_type": "text",
+            "parts": ["建议分层：应用层 Electron GUI、引擎层纯 TS、适配器层、中间格式 IR。\n统一检索用 SQLite FTS5 trigram。"]
+          },
+          "create_time": 1757000200.0,
+          "status": "finished_successfully"
+        }
+      },
+      "ddd": {
+        "id": "ddd",
+        "parent": "ccc",
+        "children": ["eee"],
+        "message": {
+          "id": "ddd",
+          "author": { "role": "user" },
+          "content": { "content_type": "text", "parts": ["那写回安全怎么保证？"] },
+          "create_time": 1757000400.0
+        }
+      },
+      "eee": {
+        "id": "eee",
+        "parent": "ddd",
+        "children": [],
+        "message": {
+          "id": "eee",
+          "author": { "role": "assistant" },
+          "content": {
+            "content_type": "text",
+            "parts": ["写前备份、运行检测、SQLite 事务回滚、schema 指纹探测、tool_call 配对校验。"]
+          },
+          "create_time": 1757000500.0
+        }
+      }
+    }
+  },
+  {
+    "title": "简单问候",
+    "create_time": 1756900000.0,
+    "update_time": 1756900060.0,
+    "conversation_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    "default_model_slug": "gpt-4o",
+    "mapping": {
+      "root": {
+        "id": "root",
+        "message": null,
+        "parent": null,
+        "children": ["u1"]
+      },
+      "u1": {
+        "id": "u1",
+        "parent": "root",
+        "children": ["a1"],
+        "message": {
+          "id": "u1",
+          "author": { "role": "user" },
+          "content": { "content_type": "text", "parts": ["你好"] },
+          "create_time": 1756900010.0
+        }
+      },
+      "a1": {
+        "id": "a1",
+        "parent": "u1",
+        "children": [],
+        "message": {
+          "id": "a1",
+          "author": { "role": "assistant" },
+          "content": { "content_type": "text", "parts": ["你好！有什么可以帮你的？"] },
+          "create_time": 1756900020.0
+        }
+      }
+    }
+  }
+]

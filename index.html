@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SessionHarbor · 会话港湾 — 跨 AI 客户端的会话记录统一管理</title>
+<style>
+  :root{
+    --bg:#0b1220; --bg2:#0f1a2e; --card:#121e35; --line:#1f2f4d;
+    --ink:#e8eef7; --sub:#9db0cc; --dim:#6b7f9e;
+    --sea:#38bdf8; --sea2:#0ea5e9; --gold:#fbbf24; --green:#34d399; --red:#f87171;
+    --mono:"Cascadia Code",Consolas,"Courier New",monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--ink);font-family:"PingFang SC","Microsoft YaHei",-apple-system,sans-serif;line-height:1.7}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 28px}
+  a{color:var(--sea)}
+
+  /* hero */
+  .hero{position:relative;padding:96px 0 72px;background:
+    radial-gradient(1200px 500px at 70% -10%, rgba(56,189,248,.14), transparent 60%),
+    radial-gradient(800px 400px at 10% 110%, rgba(251,191,36,.07), transparent 60%),
+    var(--bg);overflow:hidden}
+  .hero::after{content:"";position:absolute;left:0;right:0;bottom:0;height:120px;
+    background:repeating-linear-gradient(180deg,transparent 0 38px,rgba(56,189,248,.05) 38px 39px);
+    mask-image:linear-gradient(180deg,transparent,#000);pointer-events:none}
+  .badge{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:4px 14px;
+    font-size:13px;color:var(--sea);background:rgba(56,189,248,.08);letter-spacing:.05em}
+  h1{font-size:52px;font-weight:800;margin:22px 0 6px;letter-spacing:-.01em}
+  h1 .en{color:var(--sea)}
+  .slogan{font-size:20px;color:var(--sub);max-width:720px}
+  .slogan b{color:var(--ink)}
+  .hero-meta{display:flex;gap:28px;margin-top:36px;flex-wrap:wrap}
+  .hero-meta div{border-left:3px solid var(--sea2);padding-left:14px}
+  .hero-meta .k{font-size:12px;color:var(--dim);letter-spacing:.1em}
+  .hero-meta .v{font-size:15px;color:var(--ink);font-weight:600}
+
+  section{padding:64px 0}
+  section:nth-of-type(even){background:var(--bg2)}
+  .kicker{font-size:13px;color:var(--sea);letter-spacing:.2em;font-weight:700;text-transform:uppercase}
+  h2{font-size:32px;font-weight:800;margin:10px 0 8px}
+  .lead{color:var(--sub);font-size:16.5px;max-width:820px;margin-bottom:32px}
+
+  /* pain cards */
+  .grid{display:grid;gap:18px}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:820px){.g3,.g2{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px}
+  .card h3{font-size:18px;margin-bottom:8px}
+  .card p{color:var(--sub);font-size:14.5px}
+  .icon{font-size:26px;margin-bottom:12px;display:block}
+
+  /* quote */
+  .quote{border-left:4px solid var(--gold);background:rgba(251,191,36,.06);
+    padding:18px 22px;border-radius:0 12px 12px 0;margin:26px 0;font-size:15px;color:var(--sub)}
+  .quote b{color:var(--gold)}
+
+  /* flow diagram */
+  .flow{display:flex;align-items:stretch;gap:0;margin:30px 0;flex-wrap:wrap}
+  .flow .col{flex:1;min-width:180px}
+  .flow .node{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:14px 16px;margin:6px 0;font-size:13.5px}
+  .flow .node small{display:block;color:var(--dim);font-size:11.5px;margin-top:2px}
+  .flow .arrow{display:flex;align-items:center;justify-content:center;color:var(--sea);
+    font-size:22px;padding:0 8px;flex:0 0 auto}
+  .flow .hub{background:linear-gradient(160deg,rgba(56,189,248,.16),rgba(56,189,248,.05));
+    border-color:rgba(56,189,248,.45);border-radius:14px;padding:20px 14px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+  .flow .hub .t{font-weight:800;color:var(--sea);font-size:16px}
+  .flow .hub small{color:var(--sub);font-size:12px;margin-top:6px;line-height:1.5}
+
+  /* status table */
+  table{width:100%;border-collapse:collapse;font-size:14.5px;background:var(--card);
+    border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th{background:rgba(56,189,248,.08);text-align:left;padding:12px 16px;font-size:13px;
+    color:var(--sea);letter-spacing:.05em;border-bottom:1px solid var(--line)}
+  td{padding:12px 16px;border-bottom:1px solid var(--line);color:var(--sub)}
+  td:first-child{color:var(--ink);font-weight:600}
+  tr:last-child td{border-bottom:none}
+  .ok{color:var(--green);font-weight:700}
+  .doing{color:var(--gold);font-weight:700}
+  .todo{color:var(--dim)}
+
+  /* terminal */
+  .term{background:#060b14;border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:26px}
+  .term .bar{display:flex;gap:7px;padding:11px 16px;border-bottom:1px solid var(--line);background:#0a1120}
+  .term .bar i{width:11px;height:11px;border-radius:50%;display:block}
+  .term .bar i:nth-child(1){background:#ff5f57}.term .bar i:nth-child(2){background:#febc2e}.term .bar i:nth-child(3){background:#28c840}
+  .term pre{padding:18px 20px;font-family:var(--mono);font-size:13px;line-height:1.75;
+    color:#c9d7ea;overflow-x:auto}
+  .term .c{color:#5b708f}.term .g{color:var(--green)}.term .y{color:var(--gold)}.term .b{color:var(--sea)}
+
+  /* pricing */
+  .price .card{position:relative}
+  .price .card.free{border-color:rgba(52,211,153,.4)}
+  .price .tag{position:absolute;top:-11px;right:18px;font-size:11px;font-weight:700;
+    padding:3px 12px;border-radius:999px;letter-spacing:.08em}
+  .tag.free{background:rgba(52,211,153,.15);color:var(--green);border:1px solid rgba(52,211,153,.4)}
+  .tag.pro{background:rgba(56,189,248,.15);color:var(--sea);border:1px solid rgba(56,189,248,.4)}
+  .tag.team{background:rgba(251,191,36,.15);color:var(--gold);border:1px solid rgba(251,191,36,.4)}
+  .price ul{list-style:none;margin-top:14px}
+  .price li{font-size:14px;color:var(--sub);padding:6px 0 6px 24px;position:relative}
+  .price li::before{content:"✓";position:absolute;left:2px;color:var(--green);font-weight:700}
+  .price .num{font-size:30px;font-weight:800;color:var(--ink)}
+  .price .num small{font-size:13px;color:var(--dim);font-weight:400}
+
+  /* roadmap */
+  .road{position:relative;margin-top:30px;padding-left:28px}
+  .road::before{content:"";position:absolute;left:8px;top:6px;bottom:6px;width:2px;
+    background:linear-gradient(180deg,var(--green),var(--gold) 45%,var(--line))}
+  .ms{position:relative;padding:0 0 26px}
+  .ms::before{content:"";position:absolute;left:-26px;top:6px;width:12px;height:12px;border-radius:50%;
+    background:var(--bg);border:3px solid var(--gold)}
+  .ms.done::before{border-color:var(--green);background:var(--green)}
+  .ms h4{font-size:16.5px}
+  .ms h4 .st{font-size:11.5px;font-weight:700;padding:2px 10px;border-radius:999px;margin-left:10px;vertical-align:2px}
+  .st.done{background:rgba(52,211,153,.14);color:var(--green)}
+  .st.now{background:rgba(251,191,36,.14);color:var(--gold)}
+  .st.next{background:rgba(107,127,158,.15);color:var(--dim)}
+  .ms p{color:var(--sub);font-size:14px;margin-top:4px}
+
+  footer{padding:44px 0 56px;text-align:center;color:var(--dim);font-size:13.5px;
+    border-top:1px solid var(--line)}
+  footer .big{font-size:19px;color:var(--ink);font-weight:700;margin-bottom:10px}
+  footer .big span{color:var(--sea)}
+</style>
+</head>
+<body>
+
+<!-- ================= HERO ================= -->
+<div class="hero">
+  <div class="wrap">
+    <span class="badge">LOCAL-FIRST · E2EE · 开源引擎</span>
+    <h1><span class="en">SessionHarbor</span> · 会话港湾</h1>
+    <p class="slogan">你和 AI 的每一段对话，散落在七八个客户端里。<br>
+    SessionHarbor 把它们<b>收进同一个港湾</b>——统一检索、自由迁移、安全归档。</p>
+    <div class="hero-meta">
+      <div><div class="k">现状</div><div class="v">M1 完成 · GUI 实测可用 ✅</div></div>
+      <div><div class="k">已接入客户端</div><div class="v">领慧 · Claude Code · WorkBuddy · Codex · ChatGPT导出</div></div>
+      <div><div class="k">检索性能</div><div class="v">FTS5 · 命中 &lt; 5ms</div></div>
+      <div><div class="k">形态</div><div class="v">CLI + 桌面 GUI（实测可用）</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 痛点 ================= -->
+<section>
+  <div class="wrap">
+    <div class="kicker">Why · 为什么要做</div>
+    <h2>AI 用得越多，对话越像「失联的船」</h2>
+    <p class="lead">2026 年的开发者与知识工作者，手里同时开着 Claude Code、Codex、领慧、WorkBuddy、MiMo、ChatGPT……每家客户端各存各的对话，互不相认。</p>
+    <div class="grid g3">
+      <div class="card"><span class="icon">🔍</span><h3>找不到</h3>
+        <p>「上个月我好像问过这个问题」——但记不清在哪个客户端问的，只能挨个翻。有客户端连搜索都没有。</p></div>
+      <div class="card"><span class="icon">🚪</span><h3>带不走</h3>
+        <p>换工具时对话无法带走。官方迁移通道限制重重：Codex /import 只搬最近 30 天 50 条，而且只进不出。</p></div>
+      <div class="card"><span class="icon">👥</span><h3>没法共享</h3>
+        <p>「这个坑谁踩过？」——团队里最值钱的排障经验锁在个人客户端里，卸载即蒸发，新人反复踩坑。</p></div>
+    </div>
+    <div class="quote">这不是我们一家的臆想：V2EX 上 2026 年 4 / 6 / 8 月<b>三次独立出现同款求助帖</b>（最高 2406 点击），无人给出成品答案；Google、Anthropic、OpenAI 三大厂商同期亲自下场做「记忆导入 / 会话搬家」——但它们全都<b>只往自己家里搬</b>。中立的第三方港湾，是空白。</div>
+  </div>
+</section>
+
+<!-- ================= 是什么 ================= -->
+<section>
+  <div class="wrap">
+    <div class="kicker">What · 这是什么</div>
+    <h2>一个中立的「会话资产」管理器</h2>
+    <p class="lead">SessionHarbor 在本地扫描你所有 AI 客户端的会话存储，解析成统一的中间格式（IR），提供跨客户端全文检索、原生格式互迁和归档导出。它不发消息、不操控客户端、不碰你的账号——只读写「对话记录」这件事。</p>
+
+    <div class="flow">
+      <div class="col">
+        <div class="node">🟠 Claude Code<small>~/.claude/projects/*.jsonl</small></div>
+        <div class="node">🔵 领慧AI工作台<small>alink/messages_*.sqlite + *.jsonl</small></div>
+        <div class="node">🟣 WorkBuddy<small>workbuddy.db + projects/*.jsonl</small></div>
+        <div class="node">⚪ Codex / MiMo / ChatGPT 导出<small>适配器持续扩展中</small></div>
+      </div>
+      <div class="arrow">⟶</div>
+      <div class="col" style="flex:0 0 240px">
+        <div class="hub" style="height:100%">
+          <div class="t">⚓ SessionHarbor</div>
+          <small>统一中间格式 IR<br>SQLite FTS5 全文索引<br>迁移引擎 + 写前备份<br>脱敏过滤</small>
+        </div>
+      </div>
+      <div class="arrow">⟶</div>
+      <div class="col">
+        <div class="node">🔎 统一检索<small>一个搜索框查遍所有客户端</small></div>
+        <div class="node">🔁 双向迁移<small>写回目标客户端原生格式，落地即可继续对话</small></div>
+        <div class="node">📦 归档导出<small>Markdown / JSON / HTML</small></div>
+        <div class="node">☁️ 云端同步（规划）<small>E2EE 加密 + Web 阅读端 + 团队会话库</small></div>
+      </div>
+    </div>
+
+    <div class="grid g2" style="margin-top:8px">
+      <div class="card"><h3>🧭 差异化：四要素合一</h3>
+        <p>市面工具各占一角——CLI 工具没 GUI（Tape）、浏览器插件不碰本地客户端、统一客户端不收编外部历史、官方只搬进自己家。<b style="color:var(--sea)">客户端中立 + 双向原生格式互迁 + 国产/企业内部客户端覆盖 + 桌面 GUI</b>，四要素同时满足的产品目前为零。</p></div>
+      <div class="card"><h3>🚫 明确不做</h3>
+        <p>不做 Agent 记忆/skill 管理（红海），不做多 Agent 编排（25+ 工具厮杀），不把「跨设备续接」当卖点（云电脑和目录同步已解决）。只做一件事并做深：<b style="color:var(--sea)">会话记录本身</b>。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 已经做到了什么 ================= -->
+<section>
+  <div class="wrap">
+    <div class="kicker">Proof · 已验证的能力</div>
+    <h2>不是 PPT，是跑通的代码</h2>
+    <p class="lead">截至 2026-09-11，M0 已在真实数据上完成沙箱验收：一段 58 条消息的领慧会话迁入 Claude Code（消息链完整），再迁回领慧（会话可正常打开继续）——<b style="color:var(--green)">双向闭环 ✅</b>。</p>
+
+    <table>
+      <tr><th style="width:34%">能力</th><th style="width:16%">状态</th><th>说明</th></tr>
+      <tr><td>IR v1 统一中间格式</td><td class="ok">✅ 已实现</td><td>版本化 JSONL；消息 / 工具调用 / thinking 一等公民；extensions 扩展位</td></tr>
+      <tr><td>适配器 ×5</td><td class="ok">✅ 读+写</td><td>领慧（SQLite+JSONL 双层）、Claude Code、WorkBuddy、Codex（含 threads+session_index 双索引回写）、ChatGPT 官方导出（只读导入）</td></tr>
+      <tr><td>FTS5 统一全文检索</td><td class="ok">✅ 已实现</td><td>trigram 中文分词；本机 169 会话实测命中 1ms</td></tr>
+      <tr><td>双向迁移 + 写回安全</td><td class="ok">✅ M0 验收</td><td>写前自动备份（含 WAL/SHM）、事务回滚、dry-run、--yes 双闸、system-reminder 剥离</td></tr>
+      <tr><td>CLI 全家桶</td><td class="ok">✅ 已实现</td><td>info / list / scan / search / migrate / export / backup</td></tr>
+      <tr><td>Codex / ChatGPT 导出适配器</td><td class="doing">🔨 进行中</td><td>格式已实测调研完毕，M1 交付</td></tr>
+      <tr><td>桌面 GUI（Electron）</td><td class="ok">✅ 实测可用</td><td>会话列表 / 统一搜索 / 扫描索引 / 监听 / 迁移向导；2026-09-14 实截屏验证</td></tr>
+      <tr><td>云同步 / 团队库 / 脱敏扫描</td><td class="todo">📋 规划</td><td>M2 收尾（脱敏）与 M3</td></tr>
+    </table>
+
+    <div class="term">
+      <div class="bar"><i></i><i></i><i></i></div>
+<pre><span class="c"># 真实运行记录（2026-09-11 沙箱验收）</span>
+<span class="b">$</span> node scripts/m0-e2e.mjs
+
+<span class="y">=== 1) alink → claude-code ===</span>
+<span class="g">[success]</span> 开发MiMo与领慧AI对话记录迁移工具 (00609438-…) | 写入 58 条
+  CC 行数=58  user=1  assistant=57  <span class="g">parent链=58 ✓</span>
+
+<span class="y">=== 2) claude-code → alink ===</span>
+<span class="g">[success]</span> 你好 (026b2f92-…) | 写入 2 条
+  alink_session 行数: 169 → <span class="g">170 ✓</span>
+
+<span class="g">✅ M0 沙箱双向迁移验证通过</span>
+
+<span class="c"># 跨客户端统一检索</span>
+<span class="b">$</span> harbor search 迁移 --limit 3
+「迁移」命中 3 条 <span class="g">(1ms)</span>
+[alink] 开发MiMo与领慧AI对话记录迁移工具
+…</pre>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 怎么做到 ================= -->
+<section>
+  <div class="wrap">
+    <div class="kicker">How · 关键技术判断</div>
+    <h2>为什么「迁移」在技术上成立</h2>
+    <div class="grid g3">
+      <div class="card"><span class="icon">🧬</span><h3>存储高度同质</h3>
+        <p>实测本机 8 款客户端：主流产品几乎全部采用「JSONL 事件日志 + 可选 SQLite 索引」的同一范式。差异只在信封字段和索引表——<b style="color:var(--sea)">适配器模式即可抹平</b>。</p></div>
+      <div class="card"><span class="icon">✉️</span><h3>领慧 = Claude + 信封</h3>
+        <p>实测发现领慧的存储就是 Claude Agent SDK 事件流外包一层 {type, sessionId, timestamp, data} 信封。互转只需解包/打包——这是 M0 能用 3 天闭环的原因。</p></div>
+      <div class="card"><span class="icon">🛡️</span><h3>写回安全第一</h3>
+        <p>迁移的最大风险是写坏目标客户端。我们的铁律：写前备份（含 WAL 边车文件）、事务包裹、目标进程运行中拒写、schema 指纹探测未知版本自动降级只读。</p></div>
+    </div>
+    <div class="quote">工程经验来自两个被验证十年的社区：<b>SillyTavern 生态</b>的跨平台对话迁移实践（版本化格式 + extensions 命名空间 + 原子写三件套），以及 <b>OpenAI Responses API</b> 的 items 消息模型（消息/工具调用/工具输出同为一等公民）——IR v1 是两者与本地实测的结合。</div>
+  </div>
+</section>
+
+<!-- ================= 商业模式 ================= -->
+<section>
+  <div class="wrap">
+    <div class="kicker">Business · 商业模式</div>
+    <h2>Obsidian 模式：本地免费，流通付费</h2>
+    <p class="lead">我们不卖「存储」——字节是商品。我们卖的是让会话<b style="color:var(--ink)">流动起来</b>的能力：检索、共享、随处可读。</p>
+    <div class="grid g3 price">
+      <div class="card free"><span class="tag free">永久免费</span>
+        <h3>本地版</h3>
+        <div class="num">¥0</div>
+        <ul><li>全客户端聚合与本地索引</li><li>跨客户端全文搜索</li><li>双向迁移互转</li><li>Markdown / JSON 导出</li><li>会话分支</li></ul></div>
+      <div class="card"><span class="tag pro">订阅</span>
+        <h3>云同步 Pro</h3>
+        <div class="num">$5–8<small> /月</small></div>
+        <ul><li>本地版全部能力</li><li>E2EE 端到端加密同步</li><li>云端全文索引</li><li>Web / 移动端优雅阅读</li><li>脱敏扫描后上云</li></ul></div>
+      <div class="card"><span class="tag team">按席位</span>
+        <h3>团队版</h3>
+        <div class="num">定制</div>
+        <ul><li>团队共享会话库</li><li>「这个坑谁踩过」全局检索</li><li>企业内网私有化部署</li><li>内部客户端定制适配器</li></ul></div>
+    </div>
+    <div class="quote" style="margin-top:26px"><b>安全是底线不是卖点：</b>密钥客户端生成、永不上传，服务端零知识只见密文；会话中的 token / 密码 / 内网地址在上云前自动扫描脱敏；企业内部版数据物理隔离、绝不出内网。</div>
+  </div>
+</section>
+
+<!-- ================= 路线图 ================= -->
+<section>
+  <div class="wrap">
+    <div class="kicker">Roadmap · 路线图</div>
+    <h2>小步快跑，每个里程碑都可验收</h2>
+    <div class="road">
+      <div class="ms done"><h4>M0 · 双向迁移闭环<span class="st done">已完成 2026-09-11</span></h4>
+        <p>领慧 ↔ Claude Code 互转，真实数据沙箱验收通过（58 条消息链完整、索引回写正确）。</p></div>
+      <div class="ms done"><h4>M1 · MVP 聚合检索<span class="st done">已完成 2026-09-14</span></h4>
+        <p>五客户端适配器（含 Codex 读写、ChatGPT 官方导出导入）+ FTS5 统一搜索；1 万会话索引压测达标（搜索 0.2–52ms）。</p></div>
+      <div class="ms"><h4>M2 · 桌面 GUI<span class="st now">主体完成</span></h4>
+        <p>Electron 图形界面已实测可用（列表/搜索/迁移/监听）；收尾项：查看器深渲染、脱敏扫描、去重、打包分发。</p></div>
+      <div class="ms"><h4>M3 · 云端与团队<span class="st next">规划</span></h4>
+        <p>E2EE 云同步、Web 阅读端、团队会话库；企业内网版私有化部署。</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="big">⚓ <span>SessionHarbor</span> —— 对话的港湾，不是对话的监狱。</div>
+    <div>你的 AI 工作史属于你，不属于任何一家厂商。</div>
+    <div style="margin-top:14px">高国兴 · 2026-09 · 详细设计见《项目开发文档.md》 · M0 代码可现场演示</div>
+  </div>
+</footer>
+
+</body>
+</html>

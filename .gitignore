@@ -1,0 +1,35 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+
+# 运行时数据
+backups/
+logs/
+previews/
+exports/
+.sessionharbor/
+sandbox-m0/
+*.log
+
+# 敏感/本机数据
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+*.db-wal
+*.db-shm
+auth.json
+.env
+.env.*
+
+# 编辑器
+.vscode/
+.idea/
+
+# 大体积真实会话样本（本地用，不入库；仅保留小体积脱敏 fixture）
+fixtures/claude-code/0089fd68-3f83-4028-897c-b954525b3b3c.jsonl
+fixtures/claude-code/046b83df-b531-4b1f-96f1-5411aa6328cb.jsonl
+fixtures/**/*.sqlite
+fixtures/**/*.db

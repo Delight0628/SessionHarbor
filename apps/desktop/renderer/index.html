@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; img-src 'self' data:;" />
+  <title>SessionHarbor</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #2f81f7;
+      --ok: #3fb950;
+      --warn: #d29922;
+      --err: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font: 14px/1.5 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column;
+    }
+    header {
+      display: flex; gap: 8px; align-items: center; padding: 10px 14px; flex-wrap: wrap;
+      border-bottom: 1px solid var(--border); background: var(--panel);
+    }
+    header h1 { font-size: 15px; margin: 0 8px 0 0; font-weight: 600; letter-spacing: .02em; }
+    header h1 span { color: var(--accent); }
+    select, input, button {
+      background: #21262d; color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 10px; font: inherit;
+    }
+    button { cursor: pointer; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.on { background: #238636; border-color: #238636; color: #fff; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+    main { flex: 1; display: grid; grid-template-columns: 360px 1fr; min-height: 0; }
+    aside {
+      border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; background: var(--panel);
+    }
+    .list-head {
+      padding: 6px 12px; font-size: 12px; color: var(--muted);
+      border-bottom: 1px solid var(--border); display: flex; justify-content: space-between;
+    }
+    .list { overflow: auto; flex: 1; }
+    .item { padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+    .item:hover { background: #1c2128; }
+    .item.active { background: #1f6feb33; border-left: 3px solid var(--accent); }
+    .item .t { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item .m { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    section.viewer { overflow: auto; padding: 16px 20px; }
+    .viewer-toolbar {
+      display: flex; gap: 8px; margin-bottom: 12px; position: sticky; top: 0;
+      background: var(--bg); padding-bottom: 8px; z-index: 1;
+    }
+    .meta { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+    .meta code { color: var(--text); }
+    .msg { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; margin: 10px 0; overflow: hidden; }
+    .msg .hd { padding: 4px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; background: #21262d; color: var(--muted); }
+    .msg.user .hd { color: #79c0ff; }
+    .msg.assistant .hd { color: #7ee787; }
+    .msg pre { margin: 0; padding: 10px 12px; white-space: pre-wrap; word-break: break-word; font-size: 13px; }
+    .msg.tool .hd { color: #d2a8ff; }
+    .status { color: var(--muted); font-size: 12px; padding: 6px 14px; border-top: 1px solid var(--border); }
+    .empty { color: var(--muted); padding: 40px; text-align: center; }
+    .clients { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+    .chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+    .chip.ok { border-color: #238636; color: var(--ok); }
+    .chip.err { border-color: #da3633; color: var(--err); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Session<span>Harbor</span></h1>
+    <select id="client">
+      <option value="alink">领慧 alink</option>
+      <option value="claude-code">Claude Code</option>
+      <option value="workbuddy">WorkBuddy</option>
+      <option value="codex">Codex</option>
+      <option value="chatgpt-export">ChatGPT Export</option>
+    </select>
+    <input id="filter" placeholder="标题关键字…" style="width:160px" />
+    <button id="btnList">列表</button>
+    <span class="sep"></span>
+    <input id="query" placeholder="统一搜索…" style="width:180px" />
+    <button id="btnSearch" class="primary">搜索</button>
+    <button id="btnScan">扫描索引</button>
+    <button id="btnWatch" title="监听客户端数据目录并自动刷新索引">监听</button>
+    <span class="sep"></span>
+    <select id="migrateTo">
+      <option value="">迁移到…</option>
+      <option value="alink">领慧 alink</option>
+      <option value="claude-code">Claude Code</option>
+      <option value="workbuddy">WorkBuddy</option>
+      <option value="codex">Codex</option>
+    </select>
+    <button id="btnMigrate">迁移选中</button>
+    <span id="clients" class="clients"></span>
+  </header>
+  <main>
+    <aside>
+      <div class="list-head"><span id="listCount">…</span><span id="listSrc">alink</span></div>
+      <div id="list" class="list"><div class="empty">加载中…</div></div>
+    </aside>
+    <section class="viewer" id="viewer">
+      <div class="empty">选择左侧会话查看；或用顶部搜索。</div>
+    </section>
+  </main>
+  <div class="status" id="status">就绪</div>
+  <script src="./app.js"></script>
+</body>
+</html>

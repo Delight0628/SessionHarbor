@@ -5,6 +5,7 @@ const status = (t) => { $("#status").textContent = t; };
 let sessions = [];
 let activeId = null;
 let activeClient = null;
+let activeGroup = null;
 let watching = false;
 
 function fmtTs(ms) {
@@ -118,6 +119,8 @@ function toolbarHtml(client, id) {
 async function openSession(client, id) {
   activeId = id;
   activeClient = client;
+  const found = sessions.find((s) => s.id === id && s.client === client);
+  activeGroup = found?.group || null;
   status(`读取 ${client} / ${id} …`);
   try {
     const data = await window.harbor.read(client, id);
@@ -327,11 +330,61 @@ async function refreshClients() {
   }
 }
 
+async function doSync() {
+  const scope = $("#syncScope").value;
+  const opts = { scope };
+  if (scope === "client") {
+    if (!$("#client").value) {
+      status("请先选择来源客户端");
+      return;
+    }
+    opts.client = $("#client").value;
+  } else if (scope === "group") {
+    const g = activeGroup || prompt("输入项目/文件夹名（group）:");
+    if (!g) {
+      status("未指定项目");
+      return;
+    }
+    opts.group = g;
+  } else if (scope === "session") {
+    if (!activeId || !activeClient) {
+      status("请先选择一条会话");
+      return;
+    }
+    opts.sessionId = activeId;
+    opts.client = activeClient;
+  }
+  const dry = !confirm(
+    `同步范围：${scope}${opts.group ? " / " + opts.group : ""}${opts.sessionId ? " / 单条" : ""}\n\n确定 = 真实上传（AES-256-GCM 加密）\n取消 = dry-run 预览`,
+  );
+  status(dry ? "同步预览…" : "同步中…");
+  $("#btnSync").disabled = true;
+  try {
+    const r = await window.harbor.sync({ ...opts, dryRun: dry });
+    if (r?.error) {
+      status(r.error);
+      return;
+    }
+    status(
+      `同步: 上传 ${r.report.uploaded} 跳过 ${r.report.skipped} 失败 ${r.report.failed} · 云端 ${r.cloudCount} 条 · ${r.cloudRoot}`,
+    );
+    $("#viewer").insertAdjacentHTML(
+      "afterbegin",
+      `<div class="msg"><div class="hd">云同步报告</div><pre>${escapeHtml(r.text)}</pre></div>`,
+    );
+  } catch (e) {
+    status(`同步失败: ${e.message || e}`);
+  } finally {
+    $("#btnSync").disabled = false;
+  }
+}
+
 $("#btnList").addEventListener("click", loadList);
 $("#btnSearch").addEventListener("click", doSearch);
 $("#btnScan").addEventListener("click", doScan);
 $("#btnWatch").addEventListener("click", toggleWatch);
 $("#btnMigrate").addEventListener("click", doMigrate);
+$("#btnSync").addEventListener("click", doSync);
 $("#filter").addEventListener("keydown", (e) => e.key === "Enter" && loadList());
 $("#query").addEventListener("keydown", (e) => e.key === "Enter" && doSearch());
 $("#client").addEventListener("change", loadList);

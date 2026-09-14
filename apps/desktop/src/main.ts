@@ -14,6 +14,10 @@ import {
   toHtml,
   toMarkdown,
   watchDirsFor,
+  syncToCloud,
+  formatSyncResult,
+  loadOrCreateSyncConfig,
+  listCloudSessions,
   type ClientPathsLike,
   type FilterSpec,
 } from "@sessionharbor/core";
@@ -380,6 +384,53 @@ ipcMain.handle("harbor:watchStop", () => {
   activeWatcher = null;
   return { ok: true };
 });
+
+ipcMain.handle(
+  "harbor:sync",
+  async (
+    _e,
+    opts: {
+      scope: "client" | "group" | "session" | "all";
+      client?: string;
+      group?: string;
+      sessionId?: string;
+      cloudRoot?: string;
+      dryRun?: boolean;
+    },
+  ) => {
+    const cfg = loadOrCreateSyncConfig(WORKDIR);
+    const root = path.resolve(
+      opts.cloudRoot || path.join(WORKDIR, ".sessionharbor", "cloud"),
+    );
+    const adapters = [];
+    for (const id of CLIENTS) {
+      try {
+        adapters.push(getAdapter(id));
+      } catch {
+        /* skip */
+      }
+    }
+    const report = await syncToCloud({
+      adapters,
+      target: { kind: "directory", root },
+      filter: {
+        scope: opts.scope,
+        client: opts.client,
+        group: opts.group,
+        sessionId: opts.sessionId,
+      },
+      passphrase: cfg.passphrase,
+      workdir: WORKDIR,
+      dryRun: opts.dryRun,
+    });
+    return {
+      report,
+      text: formatSyncResult(report),
+      cloudRoot: root,
+      cloudCount: listCloudSessions(root).length,
+    };
+  },
+);
 
 app.whenReady().then(() => {
   createWindow();

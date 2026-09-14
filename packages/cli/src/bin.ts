@@ -26,6 +26,10 @@ import {
   entryFromIR,
   analyzeDedup,
   formatDedupSummary,
+  syncToCloud,
+  formatSyncResult,
+  loadOrCreateSyncConfig,
+  listCloudSessions,
   type ClientPathsLike,
   type FilterSpec,
 } from "@sessionharbor/core";
@@ -168,6 +172,9 @@ function help(): void {
   harbor watch [--client A] [--debounce ms]   增量监听并刷新索引
   harbor secrets --client A [--id ...] [--limit N]   敏感信息扫描
   harbor dedup [--client A] [--limit N]               去重与分叉检测
+  harbor sync [client|group|session|all] [--client A] [--group G] [--id S]
+             [--cloud-root DIR] [--dry-run] [--list-cloud]
+             按来源/项目/单条同步到云目录（AES-256-GCM）
 
 全局选项:
   --workdir DIR       备份/日志/索引目录（默认 cwd）
@@ -567,6 +574,56 @@ async function cmdDedup(args: Record<string, string | boolean | string[]>): Prom
   return 0;
 }
 
+async function cmdSync(args: Record<string, string | boolean | string[]>, positional: string[]): Promise<number> {
+  const wd = workdir(args);
+  const cfg = loadOrCreateSyncConfig(wd);
+  const root = path.resolve(
+    String(args["cloud-root"] ?? path.join(wd, ".sessionharbor", "cloud")),
+  );
+  const passphrase = String(args.passphrase ?? cfg.passphrase);
+  const scopeArg = String(args.scope ?? positional[0] ?? "").toLowerCase();
+  let scope: "client" | "group" | "session" | "all" = "all";
+  if (scopeArg === "client" || args.client) scope = "client";
+  if (scopeArg === "group" || args.group) scope = "group";
+  if (scopeArg === "session" || args.id) scope = "session";
+  if (scopeArg === "all") scope = "all";
+
+  const filter = {
+    scope,
+    client: args.client ? String(args.client) : undefined,
+    group: args.group ? String(args.group) : undefined,
+    sessionId: Array.isArray(args.id) ? String(args.id[0]) : args.id ? String(args.id) : undefined,
+  };
+
+  const adapters = [];
+  for (const id of CLIENTS) {
+    try {
+      adapters.push(getAdapter(id, args));
+    } catch {
+      /* skip not installed */
+    }
+  }
+
+  const report = await syncToCloud({
+    adapters,
+    target: { kind: "directory", root },
+    filter,
+    passphrase,
+    workdir: wd,
+    dryRun: Boolean(args["dry-run"]),
+  });
+  console.log(formatSyncResult(report));
+  console.log(`\n云目录: ${root}`);
+  if (args["list-cloud"]) {
+    const entries = listCloudSessions(root);
+    console.log(`云端清单 ${entries.length} 条:`);
+    for (const e of entries.slice(0, 30)) {
+      console.log(`  [${e.sourceClient}] ${e.group || "-"} ${e.title} → ${e.path}`);
+    }
+  }
+  return report.failed ? 1 : 0;
+}
+
 async function main(): Promise<void> {
   const { args, positional } = parseArgs(process.argv.slice(2));
   const cmd = positional[0] || String(args._ ?? "") || "help";
@@ -601,6 +658,9 @@ async function main(): Promise<void> {
         break;
       case "dedup":
         process.exit(await cmdDedup(args));
+        break;
+      case "sync":
+        process.exit(await cmdSync(args, positional.slice(1)));
         break;
       case "help":
       case "--help":

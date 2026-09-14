@@ -12,3 +12,5 @@ export * from "./watcher.js";
 export * from "./secrets.js";
 export * from "./dedup.js";
 export * from "./detect.js";
+export * from "./crypto.js";
+export * from "./sync.js";

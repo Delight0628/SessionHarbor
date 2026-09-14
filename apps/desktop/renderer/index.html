@@ -131,6 +131,14 @@
       <option value="mimo">MiMo Desktop</option>
     </select>
     <button id="btnMigrate">迁移选中</button>
+    <span class="sep"></span>
+    <select id="syncScope" title="同步范围">
+      <option value="client">按来源同步</option>
+      <option value="group">按项目同步</option>
+      <option value="session">同步选中</option>
+      <option value="all">全部同步</option>
+    </select>
+    <button id="btnSync" title="加密上传到云目录">同步到云</button>
     <span id="clients" class="clients"></span>
   </header>
   <main>

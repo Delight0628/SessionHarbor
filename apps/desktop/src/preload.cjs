@@ -12,4 +12,5 @@ contextBridge.exposeInMainWorld("harbor", {
   migrate: (opts) => ipcRenderer.invoke("harbor:migrate", opts),
   watchStart: () => ipcRenderer.invoke("harbor:watchStart"),
   watchStop: () => ipcRenderer.invoke("harbor:watchStop"),
+  sync: (opts) => ipcRenderer.invoke("harbor:sync", opts),
 });

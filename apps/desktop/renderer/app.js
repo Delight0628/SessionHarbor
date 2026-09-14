@@ -76,15 +76,15 @@ async function openSession(client, id) {
         );
       } else if (item.type === "thinking") {
         parts.push(
-          `<div class="msg tool"><div class="hd">thinking</div><pre>${escapeHtml(item.text.slice(0, 2000))}</pre></div>`,
+          `<details class="msg tool"><summary class="hd">thinking · ${escapeHtml((item.text || "").length)} chars</summary><pre>${escapeHtml(item.text.slice(0, 4000))}</pre></details>`,
         );
       } else if (item.type === "tool_call") {
         parts.push(
-          `<div class="msg tool"><div class="hd">tool · ${escapeHtml(item.toolName)}</div><pre>${escapeHtml(item.callId)}</pre></div>`,
+          `<details class="msg tool"><summary class="hd">tool_call · ${escapeHtml(item.toolName)} · ${escapeHtml(item.callId)}</summary><pre class="muted">${escapeHtml(item.timestamp || "")}</pre></details>`,
         );
       } else if (item.type === "tool_output") {
         parts.push(
-          `<div class="msg tool"><div class="hd">tool_output</div><pre>${escapeHtml((item.output || "").slice(0, 3000))}</pre></div>`,
+          `<details class="msg tool ${item.isError ? "err" : ""}"><summary class="hd">tool_output${item.isError ? " · error" : ""}</summary><pre>${escapeHtml((item.output || "").slice(0, 4000))}</pre></details>`,
         );
       }
     }

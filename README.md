@@ -4,32 +4,43 @@
 
 > 愿景：让散落在各个 AI 客户端里的对话，成为可检索、可迁移、可共享的个人与团队资产。
 
-## 当前状态（v0.1 / M0–M2 主体完成）
+## 当前状态（v0.2 / N1–N3 主体完成）
 
 | 能力 | 状态 |
 |---|---|
-| IR v1（版本化 JSONL 中间格式） | ✅ |
-| 适配器：领慧 / Claude Code / WorkBuddy / Codex / **ChatGPT Export** | ✅（ChatGPT 仅导入） |
-| CLI：info / list / scan / search / migrate / export / backup / **watch** | ✅ |
-| FTS5 trigram 统一检索 | ✅ 1 万会话索引 3.2s，搜索 <40ms |
-| 增量 watcher（fs.watch + 节流） | ✅ |
-| 写前备份 + 事务回滚 + reminder 剥离 | ✅ |
-| M0 E2E：领慧 ↔ Claude Code | ✅ |
-| Electron GUI（列表/查看/搜索/迁移/导出/监听） | ✅ |
+| IR v1 | ✅ |
+| 适配器：领慧 / CC / WorkBuddy / Codex / ChatGPT Export | ✅ |
+| CLI：info/list/scan/search/migrate/export/backup/watch/**secrets**/**dedup** | ✅ |
+| FTS5 索引 | ✅ 1 万会话 3.2s，搜索 <40ms |
+| 增量 watcher | ✅ |
+| Vitest 单测（core 12 用例） | ✅ |
+| 综合 E2E（M0 + codex 实写 + chatgpt 导入） | ✅ `scripts/e2e.mjs` |
+| 脱敏扫描 + tool 配对统计 | ✅ 挂在 migrate 报告与 `harbor secrets` |
+| 去重/分叉检测 | ✅ `harbor dedup` |
+| ADR-001 node:sqlite / ADR-002 E2EE / 团队库 / 内网部署 | ✅ 设计稿 |
+| Electron GUI（含折叠 tool/thinking） | ✅ |
+| 打包分发 electron-builder | 未做 |
+
+## 文档
+
+- [项目开发文档.md](./项目开发文档.md)
+- [docs/ADR-001-node-sqlite.md](./docs/ADR-001-node-sqlite.md)
+- [docs/ADR-002-e2ee-sync.md](./docs/ADR-002-e2ee-sync.md)
+- [docs/team-library-schema.md](./docs/team-library-schema.md)
+- [docs/enterprise-deploy.md](./docs/enterprise-deploy.md)
 
 ## 目录结构
 
 ```
 SessionHarbor/
-├─ packages/
-│  ├─ core/                 # IR、路径、备份、迁移、FTS、导出、watcher
-│  ├─ adapters/
-│  │  ├─ claude-code/  alink/  workbuddy/  codex/  chatgpt-export/
-│  └─ cli/                  # harbor 命令
+├─ packages/core/           # IR、索引、迁移、脱敏、去重、watcher
+├─ packages/adapters/*      # claude-code alink workbuddy codex chatgpt-export
+├─ packages/cli/            # harbor 命令
 ├─ apps/desktop/            # Electron GUI
-├─ fixtures/chatgpt-export/ # 官方导出样本
-├─ scripts/m0-e2e.mjs  bench-index.mjs  watch-smoke.mjs
-└─ 项目开发文档.md
+├─ fixtures/                # 脱敏样本
+├─ scripts/e2e.mjs          # 综合 E2E
+├─ scripts/bench-index.mjs  # 1 万索引压测
+└─ docs/                    # ADR + 设计稿
 ```
 
 ## 快速开始

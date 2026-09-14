@@ -20,6 +20,12 @@ import {
   toJson,
   toHtml,
   watchDirsFor,
+  scanText,
+  redactText,
+  formatScanSummary,
+  entryFromIR,
+  analyzeDedup,
+  formatDedupSummary,
   type ClientPathsLike,
   type FilterSpec,
 } from "@sessionharbor/core";
@@ -131,6 +137,8 @@ function help(): void {
   harbor export --client A --id <sessionId> --format md|json|html [--out 文件]
   harbor backup [--client A]
   harbor watch [--client A] [--debounce ms]   增量监听并刷新索引
+  harbor secrets --client A [--id ...] [--limit N]   敏感信息扫描
+  harbor dedup [--client A] [--limit N]               去重与分叉检测
 
 全局选项:
   --workdir DIR       备份/日志/索引目录（默认 cwd）
@@ -441,6 +449,95 @@ async function cmdWatch(args: Record<string, string | boolean | string[]>): Prom
   return 0;
 }
 
+async function cmdSecrets(args: Record<string, string | boolean | string[]>): Promise<number> {
+  const client = String(args.client ?? "");
+  if (!client) {
+    console.error("用法: harbor secrets --client <client> [--id ...] [--limit N] [--redact]");
+    return 2;
+  }
+  const adapter = getAdapter(client as ClientId, args);
+  let sessions = await adapter.listSessions();
+  const ids = (args.id as string[] | undefined) ?? [];
+  if (ids.length) sessions = sessions.filter((s) => ids.some((i) => s.id.startsWith(i)));
+  if (args.limit) sessions = sessions.slice(0, Number(args.limit));
+  let total = 0;
+  let blocked = 0;
+  for (const s of sessions) {
+    const ir = await adapter.readSession(s.id);
+    const body = ir.items
+      .map((item) => {
+        if (item.type === "message")
+          return item.content.map((b) => (b.type === "text" ? b.text : "")).join("\n");
+        if (item.type === "thinking") return item.text;
+        if (item.type === "tool_output") return item.output;
+        return "";
+      })
+      .join("\n");
+    const scan = scanText(body + "\n" + ir.header.session.title);
+    if (!scan.hits.length) continue;
+    total += scan.hits.length;
+    if (scan.shouldBlockCloud) blocked++;
+    console.log(`[${s.id.slice(0, 12)}] ${s.title}`);
+    console.log(`  ${formatScanSummary(scan)}`);
+    for (const h of scan.hits.slice(0, 5)) {
+      console.log(`  · ${h.kind} (${h.confidence}) ${h.preview}`);
+    }
+    if (args.redact) {
+      const red = redactText(body, scan.hits);
+      console.log(`  (已展示脱敏预览 ${red.length} 字符，未写回源)`);
+    }
+  }
+  console.log(`\n合计命中 ${total} 处，涉及高危会话 ${blocked} 个`);
+  return 0;
+}
+
+async function cmdDedup(args: Record<string, string | boolean | string[]>): Promise<number> {
+  const client = String(args.client ?? "all");
+  const clients: ClientId[] =
+    client === "all" ? CLIENTS.filter((c) => c !== "chatgpt-export") : [client as ClientId];
+  const entries = [];
+  for (const id of clients) {
+    try {
+      const adapter = getAdapter(id, args);
+      const sessions = await adapter.listSessions();
+      let n = 0;
+      for (const s of sessions) {
+        if (args.limit && n >= Number(args.limit)) break;
+        try {
+          const ir = await adapter.readSession(s.id);
+          const e = entryFromIR(ir);
+          const preview = ir.items
+            .filter((i) => i.type === "message")
+            .slice(0, 3)
+            .map((i) =>
+              i.type === "message"
+                ? i.content.map((b) => (b.type === "text" ? b.text : "")).join(" ")
+                : "",
+            )
+            .join(" ");
+          entries.push({ ...e, textPreview: preview.slice(0, 500) });
+          n++;
+        } catch {
+          /* skip */
+        }
+      }
+    } catch (e) {
+      console.error(`[${id}] ${e instanceof Error ? e.message : e}`);
+    }
+  }
+  const r = analyzeDedup(entries);
+  console.log(formatDedupSummary(r));
+  for (const [k, dups] of r.duplicates) {
+    console.log(`重复键 ${k.slice(0, 40)}… ×${dups.length + 1}`);
+  }
+  for (const f of r.possibleForks) {
+    console.log(
+      `疑似分叉: 「${f.b.title}」 ↔ 「${f.a.title}」 sim=${f.similarity.toFixed(2)}`,
+    );
+  }
+  return 0;
+}
+
 async function main(): Promise<void> {
   const { args, positional } = parseArgs(process.argv.slice(2));
   const cmd = positional[0] || String(args._ ?? "") || "help";
@@ -469,6 +566,12 @@ async function main(): Promise<void> {
         break;
       case "watch":
         process.exit(await cmdWatch(args));
+        break;
+      case "secrets":
+        process.exit(await cmdSecrets(args));
+        break;
+      case "dedup":
+        process.exit(await cmdDedup(args));
         break;
       case "help":
       case "--help":

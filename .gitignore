@@ -11,6 +11,7 @@ previews/
 exports/
 .sessionharbor/
 sandbox-m0/
+sandbox-e2e/
 *.log
 
 # 敏感/本机数据

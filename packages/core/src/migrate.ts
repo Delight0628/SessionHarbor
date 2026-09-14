@@ -8,6 +8,40 @@ import { backupMany } from "./backup.js";
 import { timestampTag } from "./time.js";
 import { toMarkdown, toJson } from "./export.js";
 import { stripReminders } from "./text.js";
+import { scanText, formatScanSummary } from "./secrets.js";
+
+/** tool_call ↔ tool_output 配对完整性统计 */
+export function pairingStats(ir: HarborIR): {
+  toolCalls: number;
+  toolOutputs: number;
+  paired: number;
+  orphanCalls: string[];
+  orphanOutputs: string[];
+} {
+  const calls = new Map<string, string>(); // callId -> toolName
+  const outputs = new Set<string>();
+  for (const item of ir.items) {
+    if (item.type === "tool_call") calls.set(item.callId, item.toolName);
+    else if (item.type === "tool_output") outputs.add(item.callId);
+  }
+  const orphanCalls: string[] = [];
+  const orphanOutputs: string[] = [];
+  let paired = 0;
+  for (const [id, name] of calls) {
+    if (outputs.has(id)) paired++;
+    else orphanCalls.push(`${name}:${id}`);
+  }
+  for (const id of outputs) {
+    if (!calls.has(id)) orphanOutputs.push(id);
+  }
+  return {
+    toolCalls: calls.size,
+    toolOutputs: outputs.size,
+    paired,
+    orphanCalls,
+    orphanOutputs,
+  };
+}
 
 export interface FilterSpec {
   titles?: string[];
@@ -37,6 +71,16 @@ export interface MigrationReport {
   notes: string[];
   items: MigrationItem[];
   logPath?: string;
+  /** 全量 tool 配对汇总 */
+  pairing?: {
+    toolCalls: number;
+    toolOutputs: number;
+    paired: number;
+    orphanCalls: number;
+    orphanOutputs: number;
+  };
+  /** 敏感信息扫描（若启用） */
+  secrets?: { totalHits: number; shouldBlockCloud: boolean; byKind: Record<string, number> };
 }
 
 export interface MigrateOptions {
@@ -51,6 +95,10 @@ export interface MigrateOptions {
   backupPaths?: string[];
   /** 默认剥离 user 消息中的 system-reminder */
   stripReminders?: boolean;
+  /** 迁移前敏感信息扫描并写入报告 */
+  scanSecrets?: boolean;
+  /** 发现高危敏感信息时阻断写入（dry-run 仍会报告） */
+  blockOnSecrets?: boolean;
 }
 
 function matchesFilter(
@@ -127,6 +175,9 @@ export async function migrate(opts: MigrateOptions): Promise<MigrationReport> {
   report.total = selected.length;
   report.notes.push(`源会话 ${sessions.length}，筛选后 ${selected.length}`);
 
+  const pairingAgg = { toolCalls: 0, toolOutputs: 0, paired: 0, orphanCalls: 0, orphanOutputs: 0 };
+  const secretAgg = { totalHits: 0, shouldBlockCloud: false, byKind: {} as Record<string, number> };
+
   for (const s of selected) {
     try {
       const ir = await source.readSession(s.id);
@@ -139,6 +190,55 @@ export async function migrate(opts: MigrateOptions): Promise<MigrationReport> {
           }
         }
       }
+
+      // 配对统计
+      const ps = pairingStats(ir);
+      pairingAgg.toolCalls += ps.toolCalls;
+      pairingAgg.toolOutputs += ps.toolOutputs;
+      pairingAgg.paired += ps.paired;
+      pairingAgg.orphanCalls += ps.orphanCalls.length;
+      pairingAgg.orphanOutputs += ps.orphanOutputs.length;
+
+      // 敏感信息扫描
+      let secretNote: string | undefined;
+      if (opts.scanSecrets !== false) {
+        const body = ir.items
+          .map((item) => {
+            if (item.type === "message")
+              return item.content.map((b) => (b.type === "text" ? b.text : "")).join("\n");
+            if (item.type === "thinking") return item.text;
+            if (item.type === "tool_output") return item.output;
+            return "";
+          })
+          .join("\n");
+        const scan = scanText(body + "\n" + ir.header.session.title);
+        if (scan.hits.length) {
+          secretAgg.totalHits += scan.hits.length;
+          if (scan.shouldBlockCloud) secretAgg.shouldBlockCloud = true;
+          for (const [k, n] of Object.entries(scan.byKind)) {
+            secretAgg.byKind[k] = (secretAgg.byKind[k] || 0) + n;
+          }
+          secretNote = formatScanSummary(scan);
+          if (opts.blockOnSecrets && scan.shouldBlockCloud && !opts.dryRun) {
+            report.failed++;
+            report.items.push({
+              status: "failed",
+              sessionId: s.id,
+              title: s.title,
+              message: `阻断：${secretNote}`,
+            });
+            continue;
+          }
+        }
+      }
+
+      const pairingNote =
+        ps.orphanCalls.length || ps.orphanOutputs.length
+          ? `配对: ${ps.paired}/${ps.toolCalls} 调用, 孤立调用 ${ps.orphanCalls.length} 孤立输出 ${ps.orphanOutputs.length}`
+          : ps.toolCalls
+            ? `配对: ${ps.paired}/${ps.toolCalls}`
+            : undefined;
+
       if (opts.filter?.keyword && !matchesFilter(s, ir, opts.filter)) {
         report.skipped++;
         report.items.push({
@@ -155,11 +255,13 @@ export async function migrate(opts: MigrateOptions): Promise<MigrationReport> {
           status: "skipped",
           sessionId: s.id,
           title: s.title,
-          message: "dry-run，未写入",
+          message: ["dry-run，未写入", pairingNote, secretNote].filter(Boolean).join("；"),
           detail: {
             title: ir.header.session.title,
             items: ir.items.length,
             cwd: ir.header.session.cwd,
+            pairing: ps,
+            secrets: secretNote,
           },
         });
         continue;
@@ -173,8 +275,15 @@ export async function migrate(opts: MigrateOptions): Promise<MigrationReport> {
           status: "success",
           sessionId: s.id,
           title: s.title,
-          message: `写入 ${result.messageCount ?? 0} 条`,
-          detail: result.detail ?? { targetPath: result.targetPath, sessionId: result.sessionId },
+          message: [`写入 ${result.messageCount ?? 0} 条`, pairingNote, secretNote]
+            .filter(Boolean)
+            .join("；"),
+          detail: {
+            ...(result.detail ?? {}),
+            targetPath: result.targetPath,
+            sessionId: result.sessionId,
+            pairing: ps,
+          },
         });
       } else if (result.status === "skipped") {
         report.skipped++;
@@ -202,6 +311,19 @@ export async function migrate(opts: MigrateOptions): Promise<MigrationReport> {
         message: e instanceof Error ? e.message : String(e),
       });
     }
+  }
+
+  report.pairing = pairingAgg;
+  report.secrets = secretAgg;
+  if (pairingAgg.toolCalls) {
+    report.notes.push(
+      `tool 配对: ${pairingAgg.paired}/${pairingAgg.toolCalls}，孤立调用 ${pairingAgg.orphanCalls}，孤立输出 ${pairingAgg.orphanOutputs}`,
+    );
+  }
+  if (secretAgg.totalHits) {
+    report.notes.push(
+      `敏感信息: ${secretAgg.totalHits} 处${secretAgg.shouldBlockCloud ? "（含高危，建议勿上云）" : ""}`,
+    );
   }
 
   const logPath = path.join(logDir, `migrate_${source.id}_to_${target.id}_${tag}.json`);

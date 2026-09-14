@@ -494,6 +494,7 @@ export class CodexAdapter implements Adapter {
 
     // 回写 threads + session_index
     let indexOk = false;
+    let threadsError: string | undefined;
     if (p.primaryDb && fs.existsSync(p.primaryDb)) {
       try {
         const db = openRw(p.primaryDb);
@@ -505,9 +506,10 @@ export class CodexAdapter implements Adapter {
           db.prepare(
             `INSERT INTO threads
              (id, rollout_path, created_at, updated_at, source, model_provider,
-              cwd, title, archived, cli_version, first_user_message, model,
-              created_at_ms, updated_at_ms, thread_source, preview)
-             VALUES (?, ?, ?, ?, 'sessionharbor', 'migrated', ?, ?, 0, 'sessionharbor-0.1', ?, ?, ?, ?, 'user', ?)`,
+              cwd, title, sandbox_policy, approval_mode, archived, cli_version,
+              first_user_message, model, created_at_ms, updated_at_ms,
+              thread_source, preview)
+             VALUES (?, ?, ?, ?, 'sessionharbor', 'migrated', ?, ?, ?, 'never', 0, 'sessionharbor-0.1', ?, ?, ?, ?, 'user', ?)`,
           ).run(
             sessionId,
             outPath,
@@ -515,6 +517,7 @@ export class CodexAdapter implements Adapter {
             Math.floor(updatedMs / 1000),
             cwd,
             s.title || sessionId,
+            '{"type":"workspace-write"}',
             s.title || "",
             s.model || "migrated",
             createdMs,
@@ -527,21 +530,12 @@ export class CodexAdapter implements Adapter {
         indexOk = true;
       } catch (e) {
         indexOk = false;
-        // 文件已写，索引失败仅告警
-        return {
-          status: "ok",
-          sessionId,
-          messageCount: msgCount,
-          targetPath: outPath,
-          detail: {
-            warning: `threads 回写失败: ${e instanceof Error ? e.message : e}`,
-            fileName,
-          },
-        };
+        threadsError = e instanceof Error ? e.message : String(e);
       }
     }
     if (p.sessionIndex) {
       try {
+        fs.mkdirSync(path.dirname(p.sessionIndex), { recursive: true });
         const entry = JSON.stringify({
           id: sessionId,
           thread_name: s.title || sessionId,
@@ -558,7 +552,11 @@ export class CodexAdapter implements Adapter {
       sessionId,
       messageCount: msgCount,
       targetPath: outPath,
-      detail: { fileName, threadsIndexed: indexOk },
+      detail: {
+        fileName,
+        threadsIndexed: indexOk,
+        ...(threadsError ? { warning: `threads 回写失败: ${threadsError}` } : {}),
+      },
     };
   }
 }

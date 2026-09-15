@@ -278,7 +278,7 @@ async function doMigrate() {
     // chatgpt-export 只读，仍可作为源迁出
   }
   const dry = !confirm(
-    `将选中会话从 ${activeClient} 迁移到 ${to}？\n\n确定 = 真实写入（自动备份）\n取消 = 仅预览 dry-run`,
+    `将选中会话从 ${activeClient} 迁移到 ${to}？\n\n确定 = 真实写入（目标已存在则覆盖）\n取消 = 仅预览 dry-run`,
   );
   status(dry ? "dry-run…" : "迁移中…");
   $("#btnMigrate").disabled = true;
@@ -289,15 +289,16 @@ async function doMigrate() {
       ids: [activeId],
       dryRun: dry,
       yes: !dry,
-      overwrite: false,
+      overwrite: true,
     });
     if (r.error) {
       status(r.error);
       return;
     }
     const s = r.report;
+    const skipReason = r.report.items?.find((i) => i.status === "skipped")?.message || "";
     status(
-      `迁移完成: 成功 ${s.success} 跳过 ${s.skipped} 失败 ${s.failed} · ${dry ? "dry-run" : "已写入"}`,
+      `迁移: 成功 ${s.success} 跳过 ${s.skipped} 失败 ${s.failed}${skipReason ? " · " + skipReason : ""} · ${dry ? "dry-run" : "已写入"}`,
     );
     $("#viewer").insertAdjacentHTML(
       "afterbegin",

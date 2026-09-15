@@ -275,7 +275,11 @@ export class AlinkAdapter implements Adapter {
         .prepare(`SELECT 1 FROM alink_session WHERE sessionId = ?`)
         .get(sessionId);
       if (existing && !opts?.overwrite) {
-        return { status: "skipped", sessionId, reason: "session exists" };
+        return {
+          status: "skipped",
+          sessionId,
+          reason: "目标已存在同 ID 会话（此前可能已迁入）。勾选覆盖或加 --overwrite 可重写",
+        };
       }
       const urow = db.prepare(`SELECT userId FROM alink_session LIMIT 1`).get() as
         | { userId?: string }
@@ -473,6 +477,76 @@ function writeJsonl(filePath: string, ir: HarborIR, sessionId: string): number {
             session_id: sessionId,
             uuid: randomUUID(),
             parent_tool_use_id: null,
+          },
+        }),
+      );
+      count++;
+    } else if (item.type === "tool_call") {
+      lines.push(
+        JSON.stringify({
+          type: "assistant",
+          sessionId,
+          timestamp: ts,
+          data: {
+            type: "assistant",
+            message: {
+              role: "assistant",
+              content: [
+                {
+                  type: "tool_use",
+                  id: item.callId,
+                  name: item.toolName,
+                  input: item.input,
+                },
+              ],
+              model: s.model || "migrated",
+            },
+            session_id: sessionId,
+            uuid: randomUUID(),
+            parent_tool_use_id: null,
+          },
+        }),
+      );
+      count++;
+    } else if (item.type === "tool_output") {
+      lines.push(
+        JSON.stringify({
+          type: "user",
+          sessionId,
+          timestamp: ts,
+          data: {
+            type: "user",
+            message: {
+              role: "user",
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: item.callId,
+                  content: item.output,
+                  is_error: Boolean(item.isError),
+                },
+              ],
+            },
+            session_id: sessionId,
+            uuid: randomUUID(),
+          },
+        }),
+      );
+      count++;
+    } else if (item.type === "checkpoint") {
+      // 产物汇总写成 system note，便于界面识别
+      const files = item.files.length
+        ? item.files.map((f) => `- ${f}`).join("\n")
+        : "(无文件列表)";
+      lines.push(
+        JSON.stringify({
+          type: "system",
+          sessionId,
+          timestamp: ts,
+          data: {
+            type: "system",
+            subtype: "note",
+            text: `[${item.label}]\n${files}`,
           },
         }),
       );

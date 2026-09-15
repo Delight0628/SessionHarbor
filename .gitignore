@@ -4,10 +4,14 @@ dist/
 .DS_Store
 Thumbs.db
 
-# 打包中间产物（根目录 SessionHarbor.exe 需入库，不在此忽略）
+# 打包产物：exe 不入库，通过 GitHub Releases 分发
+SessionHarbor.exe
+SessionHarbor.exe.new
+*.exe
 release/
 apps/desktop/electron-builder.json
 apps/desktop/package.json.devbackup
+apps/desktop/package.json.ui-bak
 
 # 运行时数据
 backups/

@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-label="SessionHarbor">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0B1F3A"/>
+      <stop offset="55%" stop-color="#12325C"/>
+      <stop offset="100%" stop-color="#0A2744"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3DB8FF" stop-opacity="0.15"/>
+      <stop offset="50%" stop-color="#6ED0FF" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#3DB8FF" stop-opacity="0.15"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFD56A"/>
+      <stop offset="100%" stop-color="#F0A93A"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="420" rx="24" fill="url(#bg)"/>
+
+  <!-- soft harbor lights -->
+  <circle cx="180" cy="90" r="3" fill="#FFD56A" opacity="0.9"/>
+  <circle cx="240" cy="70" r="2" fill="#9AD8FF" opacity="0.8"/>
+  <circle cx="980" cy="80" r="2.5" fill="#FFD56A" opacity="0.7"/>
+  <circle cx="1040" cy="110" r="2" fill="#9AD8FF" opacity="0.8"/>
+  <circle cx="920" cy="50" r="1.5" fill="#fff" opacity="0.6"/>
+
+  <!-- waves -->
+  <path d="M0 300 C 150 270, 250 330, 400 300 S 650 270, 800 300 S 1050 330, 1200 290 L 1200 420 L 0 420 Z" fill="url(#wave)"/>
+  <path d="M0 330 C 180 300, 280 360, 450 330 S 720 300, 900 330 S 1100 360, 1200 320 L 1200 420 L 0 420 Z" fill="#0D2748" opacity="0.75"/>
+
+  <!-- lighthouse -->
+  <g transform="translate(980 120)">
+    <rect x="18" y="40" width="28" height="150" rx="4" fill="#E8EEF7"/>
+    <rect x="18" y="70" width="28" height="14" fill="#E24B4A"/>
+    <rect x="18" y="110" width="28" height="14" fill="#E24B4A"/>
+    <polygon points="12,40 52,40 40,18 24,18" fill="#F5F7FB"/>
+    <rect x="24" y="0" width="16" height="18" rx="3" fill="url(#gold)"/>
+    <circle cx="32" cy="8" r="18" fill="#FFD56A" opacity="0.18"/>
+    <path d="M32 8 L 8 -10 L 8 26 Z" fill="#FFD56A" opacity="0.25"/>
+    <path d="M32 8 L 56 -10 L 56 26 Z" fill="#FFD56A" opacity="0.25"/>
+  </g>
+
+  <!-- pier / dock -->
+  <rect x="80" y="250" width="140" height="10" rx="3" fill="#8B6914"/>
+  <rect x="95" y="260" width="8" height="40" fill="#6E5210"/>
+  <rect x="195" y="260" width="8" height="40" fill="#6E5210"/>
+  <rect x="145" y="260" width="8" height="40" fill="#6E5210"/>
+
+  <!-- chat bubbles converging into harbor -->
+  <g opacity="0.95">
+    <rect x="120" y="90" width="70" height="42" rx="12" fill="#1E4E8C" stroke="#6ED0FF" stroke-width="1.5"/>
+    <circle cx="140" cy="111" r="4" fill="#6ED0FF"/>
+    <circle cx="155" cy="111" r="4" fill="#6ED0FF"/>
+    <circle cx="170" cy="111" r="4" fill="#6ED0FF"/>
+
+    <rect x="220" y="140" width="78" height="42" rx="12" fill="#16406F" stroke="#FFD56A" stroke-width="1.5"/>
+    <rect x="236" y="154" width="46" height="6" rx="3" fill="#FFD56A" opacity="0.8"/>
+    <rect x="236" y="166" width="30" height="6" rx="3" fill="#FFD56A" opacity="0.5"/>
+
+    <rect x="330" y="100" width="64" height="40" rx="12" fill="#1A4578" stroke="#9AD8FF" stroke-width="1.5"/>
+    <path d="M348 120 h28 M348 128 h18" stroke="#9AD8FF" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <!-- center mark: harbor crane / H -->
+  <g transform="translate(520 120)">
+    <rect x="20" y="40" width="14" height="120" rx="3" fill="url(#gold)"/>
+    <rect x="106" y="40" width="14" height="120" rx="3" fill="url(#gold)"/>
+    <rect x="20" y="88" width="100" height="14" rx="3" fill="url(#gold)"/>
+    <path d="M20 40 H 120" stroke="#FFD56A" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="70" cy="40" r="10" fill="#0B1F3A" stroke="#FFD56A" stroke-width="3"/>
+  </g>
+
+  <!-- title -->
+  <text x="120" y="330" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="48" font-weight="700" fill="#F5F8FF">SessionHarbor</text>
+  <text x="120" y="368" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="22" fill="#A8C7E8">会话港湾 · 跨 AI 客户端会话统一管理、检索与互迁</text>
+</svg>

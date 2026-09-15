@@ -31,6 +31,30 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
+/** 来源客户端 → 左侧轨颜色（海事信号灯） */
+function clientColor(id) {
+  const map = {
+    alink: "#3ec6f0",
+    "claude-code": "#d2a8ff",
+    workbuddy: "#7ee7a8",
+    codex: "#e6b84d",
+    mimo: "#ff8f6b",
+    "deepseek-harness": "#6eb6ff",
+    devin: "#f0a0c8",
+    "trae-solo": "#5ad4a0",
+    cursor: "#9ecbff",
+    vscode: "#4aa8ff",
+    hermes: "#f0c14a",
+    openclaw: "#9adf6e",
+    "chatgpt-export": "#a0b4d0",
+  };
+  return map[id] || "#3ec6f0";
+}
+
+function emptyHtml(title, hint, icon = "◎") {
+  return `<div class="empty"><div class="empty-icon">${icon}</div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(hint)}</small></div>`;
+}
+
 function bindItems(root) {
   root.querySelectorAll(".item").forEach((node) => {
     node.addEventListener("click", () => {
@@ -42,10 +66,17 @@ function bindItems(root) {
 }
 
 function itemHtml(s) {
+  const color = clientColor(s.client);
+  const ts = s.updatedAtMs || s.createdAtMs;
   return `
-    <div class="item" data-client="${s.client}" data-id="${s.id}">
+    <div class="item" data-client="${escapeHtml(s.client)}" data-id="${escapeHtml(s.id)}" style="--rail:${color}">
       <div class="t">${escapeHtml(s.title || s.id)}</div>
-      <div class="m">${fmtTs(s.updatedAtMs || s.createdAtMs)} · ${s.messageCount ?? "-"} 条</div>
+      <div class="m">
+        <span class="src-dot" style="background:${color}"></span>
+        <time>${fmtTs(ts)}</time>
+        <span>·</span>
+        <span>${s.messageCount ?? "-"} 条</span>
+      </div>
     </div>`;
 }
 
@@ -55,7 +86,7 @@ function renderList(items) {
   const el = $("#list");
   $("#listCount").textContent = `${items.length} 个会话`;
   if (!items.length) {
-    el.innerHTML = '<div class="empty">无结果</div>';
+    el.innerHTML = emptyHtml("无会话", "换一个来源客户端，或调整标题关键字", "⌕");
     return;
   }
 
@@ -82,7 +113,7 @@ function renderList(items) {
       <section class="group" data-group="${escapeHtml(name)}">
         <div class="group-head" data-gi="${gi}">
           <span class="chev">▼</span>
-          <span class="folder">📁</span>
+          <span class="folder">◆</span>
           <span class="name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
           <span class="count">${list.length}</span>
         </div>
@@ -122,7 +153,7 @@ function toolbarHtml(client, id) {
     <div class="viewer-toolbar">
       <button id="btnExportMd">导出 Markdown</button>
       <button id="btnExportHtml">导出 HTML</button>
-      <span class="chip">${escapeHtml(client)} / ${escapeHtml(id.slice(0, 36))}</span>
+      <span class="chip">${escapeHtml(client)} / ${escapeHtml(String(id).slice(0, 36))}</span>
     </div>`;
 }
 
@@ -146,7 +177,7 @@ async function openSession(client, id) {
     for (const item of data.items) {
       if (item.type === "message") {
         parts.push(
-          `<div class="msg ${item.role}"><div class="hd">${item.role}</div><pre>${escapeHtml(item.text)}</pre></div>`,
+          `<div class="msg ${item.role}"><div class="hd">${escapeHtml(item.role)}</div><pre>${escapeHtml(item.text)}</pre></div>`,
         );
       } else if (item.type === "thinking") {
         parts.push(
@@ -178,7 +209,7 @@ async function openSession(client, id) {
     });
     status(`已加载 ${data.items.length} 个条目`);
   } catch (e) {
-    $("#viewer").innerHTML = `<div class="empty">读取失败: ${escapeHtml(e.message || e)}</div>`;
+    $("#viewer").innerHTML = emptyHtml("读取失败", e.message || String(e), "!");
     status("读取失败");
   }
 }
@@ -186,8 +217,8 @@ async function openSession(client, id) {
 async function loadList() {
   const client = $("#client").value;
   if (!client) {
-    $("#list").innerHTML = '<div class="empty">未检测到本机已安装的客户端数据目录</div>';
-    $("#listSrc").textContent = "-";
+    $("#list").innerHTML = emptyHtml("未检测到客户端", "本机没有可解析的 AI 客户端数据目录", "⚓");
+    $("#listSrc").textContent = "—";
     status("无可用客户端");
     return;
   }
@@ -199,7 +230,7 @@ async function loadList() {
     renderList(sessions);
     status(`${client}: ${sessions.length} 个会话`);
   } catch (e) {
-    $("#list").innerHTML = `<div class="empty">${escapeHtml(e.message || e)}</div>`;
+    $("#list").innerHTML = emptyHtml("列表失败", e.message || String(e), "!");
     status("列表失败");
   }
 }

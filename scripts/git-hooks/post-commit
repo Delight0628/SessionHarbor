@@ -1,9 +1,12 @@
 #!/bin/sh
-# SessionHarbor post-commit：提示 exe 版本与提交对应关系（不重复打包，避免双次构建）
+# SessionHarbor post-commit：提示本地便携版状态（exe 不入库）
 COMMIT=$(git rev-parse --short HEAD)
+echo "[post-commit] 提交 ${COMMIT} 完成。"
 if [ -f "SessionHarbor.exe" ]; then
-  echo "[post-commit] SessionHarbor.exe 已与提交 ${COMMIT} 同步（由 pre-commit 重建）"
+  SIZE=$(wc -c < SessionHarbor.exe | tr -d ' ')
+  echo "[post-commit] 工作区存在本地便携版 SessionHarbor.exe (${SIZE} bytes)，未跟踪。"
 else
-  echo "[post-commit] 警告: 根目录缺少 SessionHarbor.exe，请运行 pnpm pack:exe"
+  echo "[post-commit] 如需本地便携版: pnpm pack:exe"
 fi
+echo "[post-commit] 正式分发请打 tag 或运行 Release 工作流（见 .github/workflows/release.yml）"
 exit 0

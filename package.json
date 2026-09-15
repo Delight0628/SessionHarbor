@@ -3,6 +3,26 @@
   "version": "0.1.0",
   "private": true,
   "description": "SessionHarbor — 跨 AI 客户端会话统一管理、检索与互迁",
+  "license": "MIT",
+  "author": "高国兴",
+  "homepage": "https://github.com/Delight0628/SessionHarbor#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Delight0628/SessionHarbor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Delight0628/SessionHarbor/issues"
+  },
+  "keywords": [
+    "sessionharbor",
+    "ai",
+    "session",
+    "migration",
+    "claude-code",
+    "codex",
+    "electron",
+    "local-first"
+  ],
   "packageManager": "pnpm@11.15.1",
   "engines": {
     "node": ">=22.5.0"

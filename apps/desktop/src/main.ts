@@ -38,6 +38,8 @@ import { createDevinAdapter, discoverDevin } from "@sessionharbor/adapter-devin"
 import { createTraeSoloAdapter, discoverTrae } from "@sessionharbor/adapter-trae-solo";
 import { createCursorAdapter, discoverCursor } from "@sessionharbor/adapter-cursor";
 import { createVsCodeAdapter, discoverVsCode } from "@sessionharbor/adapter-vscode";
+import { createHermesAdapter, discoverHermes } from "@sessionharbor/adapter-hermes";
+import { createOpenClawAdapter, discoverOpenClaw } from "@sessionharbor/adapter-openclaw";
 import {
   createChatGptExportAdapter,
   discoverChatGptExport,
@@ -80,6 +82,8 @@ type ClientId =
   | "trae-solo"
   | "cursor"
   | "vscode"
+  | "hermes"
+  | "openclaw"
   | "chatgpt-export";
 const CLIENTS: ClientId[] = [
   "alink",
@@ -92,6 +96,8 @@ const CLIENTS: ClientId[] = [
   "trae-solo",
   "cursor",
   "vscode",
+  "hermes",
+  "openclaw",
   "chatgpt-export",
 ];
 
@@ -134,6 +140,18 @@ const CLIENT_META: Array<{
     id: "vscode",
     displayName: "VS Code",
     discover: () => discoverVsCode(),
+    canWrite: false,
+  },
+  {
+    id: "hermes",
+    displayName: "Hermes",
+    discover: () => discoverHermes(),
+    canWrite: false,
+  },
+  {
+    id: "openclaw",
+    displayName: "OpenClaw",
+    discover: () => discoverOpenClaw(),
     canWrite: false,
   },
   {
@@ -210,6 +228,10 @@ function getAdapter(id: ClientId) {
       return createCursorAdapter(paths as never);
     case "vscode":
       return createVsCodeAdapter(paths as never);
+    case "hermes":
+      return createHermesAdapter(paths as never);
+    case "openclaw":
+      return createOpenClawAdapter(paths as never);
     case "chatgpt-export":
       return createChatGptExportAdapter(paths as never);
   }

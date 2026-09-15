@@ -26,6 +26,9 @@ function run(cmd, args, opts = {}) {
     env: {
     ...process.env,
     ELECTRON_SKIP_BINARY_DOWNLOAD: "1",
+    npm_config_offline: "true",
+    npm_config_prefer_offline: "true",
+    ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: "true",
     ...opts.env,
   },
   });
@@ -178,7 +181,29 @@ async function main() {
       unique[0];
     if (!portable) throw new Error("未找到打包产物 .exe");
 
-    fs.copyFileSync(portable, EXE_OUT);
+    // 结束正在运行的 SessionHarbor，避免根目录 exe 被占用
+    try {
+      spawnSync("taskkill", ["/IM", "SessionHarbor.exe", "/F"], {
+        stdio: "ignore",
+        shell: true,
+      });
+    } catch {
+      /* ignore */
+    }
+
+    const tmpOut = EXE_OUT + ".new";
+    let copied = false;
+    for (let i = 0; i < 8 && !copied; i++) {
+      try {
+        fs.copyFileSync(portable, tmpOut);
+        fs.renameSync(tmpOut, EXE_OUT);
+        copied = true;
+      } catch (e) {
+        if (i === 7) throw e;
+        console.log(`copy SessionHarbor.exe 失败，重试 ${i + 1}/7…`);
+        await new Promise((r) => setTimeout(r, 800));
+      }
+    }
     const sizeMb = (fs.statSync(EXE_OUT).size / 1024 / 1024).toFixed(1);
     console.log(`\n== 完成 ==`);
     console.log(`产物: ${EXE_OUT} (${sizeMb} MB)`);

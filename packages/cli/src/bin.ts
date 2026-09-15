@@ -52,6 +52,8 @@ import { createDevinAdapter, discoverDevin } from "@sessionharbor/adapter-devin"
 import { createTraeSoloAdapter, discoverTrae } from "@sessionharbor/adapter-trae-solo";
 import { createCursorAdapter, discoverCursor } from "@sessionharbor/adapter-cursor";
 import { createVsCodeAdapter, discoverVsCode } from "@sessionharbor/adapter-vscode";
+import { createHermesAdapter, discoverHermes } from "@sessionharbor/adapter-hermes";
+import { createOpenClawAdapter, discoverOpenClaw } from "@sessionharbor/adapter-openclaw";
 import {
   createChatGptExportAdapter,
   discoverChatGptExport,
@@ -68,6 +70,8 @@ const CLIENTS = [
   "trae-solo",
   "cursor",
   "vscode",
+  "hermes",
+  "openclaw",
   "chatgpt-export",
 ] as const;
 type ClientId = (typeof CLIENTS)[number];
@@ -133,6 +137,10 @@ function getClientPaths(
       return discoverCursor(args["cursor-root"] as string | undefined);
     case "vscode":
       return discoverVsCode(args["vscode-root"] as string | undefined);
+    case "hermes":
+      return discoverHermes(args["hermes-root"] as string | undefined);
+    case "openclaw":
+      return discoverOpenClaw(args["openclaw-root"] as string | undefined);
     case "chatgpt-export":
       return discoverChatGptExport(args["chatgpt-export"] as string | undefined);
   }
@@ -152,6 +160,8 @@ function getAdapter(
   if (id === "trae-solo") return createTraeSoloAdapter(paths as never);
   if (id === "cursor") return createCursorAdapter(paths as never);
   if (id === "vscode") return createVsCodeAdapter(paths as never);
+  if (id === "hermes") return createHermesAdapter(paths as never);
+  if (id === "openclaw") return createOpenClawAdapter(paths as never);
   if (id === "chatgpt-export") return createChatGptExportAdapter(paths as never);
   return createWorkbuddyAdapter(paths);
 }
@@ -179,7 +189,7 @@ function help(): void {
 
 用法:
   harbor info
-  harbor list --client alink|claude-code|workbuddy|codex|mimo|cursor|vscode|trae-solo|chatgpt-export [--json] [--title 关键字]
+  harbor list --client alink|claude-code|workbuddy|codex|mimo|cursor|vscode|trae-solo|hermes|openclaw|chatgpt-export [--json] [--title 关键字]
   harbor scan [--client ...]          构建/刷新本地 FTS 索引
   harbor search <关键词> [--limit N]   统一全文检索
   harbor migrate --from A --to B [--title ...] [--id ...] [--dry-run] [--overwrite] [--yes]
@@ -207,6 +217,8 @@ function help(): void {
   --cursor-root PATH  指定 Cursor 数据根（%APPDATA%/Cursor）
   --vscode-root PATH  指定 VS Code 数据根（%APPDATA%/Code）
   --trae-root PATH    指定 Trae 数据根
+  --hermes-root PATH  指定 Hermes 数据根（~/.hermes）
+  --openclaw-root PATH 指定 OpenClaw 数据根（~/.openclaw）
   --chatgpt-export    conversations.json 路径（只读导入）
 `);
 }

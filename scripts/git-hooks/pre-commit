@@ -1,34 +1,32 @@
 #!/bin/sh
-# SessionHarbor pre-commit：功能/修复涉及桌面端或核心逻辑时，自动重建根目录 SessionHarbor.exe
+# SessionHarbor pre-commit：可选本地重建便携 exe（仅写到工作区，不 git add）
 # 触发条件（任一）：
 #   - apps/desktop/**
 #   - packages/**
 #   - scripts/pack-desktop.mjs
 #   - package.json / pnpm-lock.yaml / pnpm-workspace.yaml
-# 跳过：HARBOR_SKIP_PACK=1（调试用）
-
+# 跳过：HARBOR_SKIP_PACK=1（默认建议；exe 由 GitHub Release 分发）
 set -e
 
-if [ "${HARBOR_SKIP_PACK}" = "1" ]; then
-  echo "[pre-commit] HARBOR_SKIP_PACK=1，跳过 exe 重建"
+# 默认跳过打包：大文件不再进入 git
+if [ "${HARBOR_SKIP_PACK}" = "1" ] || [ -z "${HARBOR_PACK_ON_COMMIT}" ]; then
+  echo "[pre-commit] 跳过 exe 重建（默认）。需要时设置 HARBOR_PACK_ON_COMMIT=1"
+  echo "[pre-commit] 提示: 便携版请通过 GitHub Releases 获取，勿提交 SessionHarbor.exe"
   exit 0
 fi
 
-# 仅在相关文件被暂存时触发
 TRIGGERED=$(git diff --cached --name-only | grep -E '^(apps/desktop/|packages/|scripts/pack-desktop\.mjs$|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$)' || true)
 
 if [ -z "$TRIGGERED" ]; then
-  echo "[pre-commit] 未改动桌面/核心相关文件，跳过 exe 重建"
+  echo "[pre-commit] 未改动核心相关文件，跳过 exe 重建"
   exit 0
 fi
 
-echo "[pre-commit] 检测到功能/修复相关变更，开始重建 SessionHarbor.exe..."
+echo "[pre-commit] HARBOR_PACK_ON_COMMIT=1，开始本地重建 SessionHarbor.exe（不入库）..."
 echo "$TRIGGERED" | sed 's/^/  - /'
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
-
-# 避免递归触发
 export HARBOR_SKIP_PACK=1
 
 if command -v pnpm >/dev/null 2>&1; then
@@ -36,16 +34,20 @@ if command -v pnpm >/dev/null 2>&1; then
 elif command -v node >/dev/null 2>&1; then
   node scripts/pack-desktop.mjs
 else
-  echo "[pre-commit] 错误: 未找到 pnpm/node，无法打包" >&2
+  echo "[pre-commit] 错误: 未找到 pnpm/node" >&2
   exit 1
 fi
 
-if [ ! -f "SessionHarbor.exe" ]; then
-  echo "[pre-commit] 错误: 未生成 SessionHarbor.exe" >&2
-  exit 1
+# 绝不 git add SessionHarbor.exe —— 大文件通过 Release 分发
+if [ -f "SessionHarbor.exe" ]; then
+  SIZE=$(wc -c < SessionHarbor.exe | tr -d ' ')
+  echo "[pre-commit] 已本地重建 SessionHarbor.exe (${SIZE} bytes)，未加入 git"
 fi
 
-git add SessionHarbor.exe
-SIZE=$(wc -c < SessionHarbor.exe | tr -d ' ')
-echo "[pre-commit] 已重建并暂存 SessionHarbor.exe (${SIZE} bytes)"
+# 若误暂存了 exe，自动移出
+if git diff --cached --name-only | grep -q 'SessionHarbor\.exe$'; then
+  git restore --staged SessionHarbor.exe 2>/dev/null || git rm --cached SessionHarbor.exe 2>/dev/null || true
+  echo "[pre-commit] 已从暂存区移除 SessionHarbor.exe"
+fi
+
 exit 0

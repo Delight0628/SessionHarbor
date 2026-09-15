@@ -29,9 +29,14 @@ type Json = Record<string, unknown>;
 
 const VALID_ENGINES = new Set(["claude", "deepseek-harness", "local-agent-harness"]);
 
+/**
+ * 写入时默认使用 claude 引擎：我们落地的是 Claude Agent SDK 事件流信封。
+ * 若标成 local-agent-harness，领慧无法用 Claude 转录 resume，会提示「历史会话已过期」。
+ */
 function normalizeEngine(v: unknown): string {
   const s = String(v ?? "").toLowerCase();
-  return VALID_ENGINES.has(s) ? s : "local-agent-harness";
+  if (s === "claude" || s === "deepseek-harness") return s;
+  return "claude";
 }
 
 function isoZ(ms: number): string {
@@ -304,7 +309,8 @@ export class AlinkAdapter implements Adapter {
         updatedS,
         s.cwd || "",
         s.model || "",
-        normalizeEngine(ir.header.extensions?.agentEngine),
+        // 必须是 claude，否则领慧无法 resume
+        "claude",
       );
 
       // legacy sessions + messages（简单聊天视图）
@@ -407,8 +413,14 @@ function writeJsonl(filePath: string, ir: HarborIR, sessionId: string): number {
         subtype: "init",
         cwd: s.cwd || "",
         session_id: sessionId,
+        tools: [],
+        mcp_servers: [],
         model: s.model || "migrated",
+        permissionMode: "default",
+        slash_commands: [],
+        apiKeySource: "migrated",
         claude_code_version: "sessionharbor-0.1",
+        output_style: "default",
         migrated_from: s.sourceClient,
         original_id: s.sourceSessionId || s.id,
         title: s.title,
@@ -522,13 +534,15 @@ function writeJsonl(filePath: string, ir: HarborIR, sessionId: string): number {
                 {
                   type: "tool_result",
                   tool_use_id: item.callId,
-                  content: item.output,
+                  content: [{ type: "text", text: item.output || "" }],
                   is_error: Boolean(item.isError),
                 },
               ],
             },
             session_id: sessionId,
             uuid: randomUUID(),
+            timestamp: ts,
+            tool_use_result: item.output || "",
           },
         }),
       );

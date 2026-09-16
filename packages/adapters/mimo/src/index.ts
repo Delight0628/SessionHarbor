@@ -396,17 +396,13 @@ export class MimoAdapter implements Adapter {
 
       // 写 fork 会话（parent_id 指向主会话，标题带 fork #n）
       let forkCount = 0;
+      let forkIdx = 0;
       for (const fk of forks) {
-        let fid = fk.ir.header.session.sourceSessionId || fk.ir.header.session.id;
-        if (!String(fid).startsWith("ses_")) {
-          fid = `ses_${String(fid).replace(/-/g, "").slice(0, 24)}`;
-        }
+        forkIdx++;
+        // 必须与主会话 ID 不同：后缀 hash 而不是截断同一前缀
+        const fid = `ses_${randomUUID().replace(/-/g, "").slice(0, 20).toUpperCase()}`;
         const fExists = db.prepare(`SELECT 1 FROM session WHERE id = ?`).get(fid);
         if (fExists && !opts?.overwrite) continue;
-        if (fExists && opts?.overwrite) {
-          db.prepare(`DELETE FROM part WHERE session_id = ?`).run(fid);
-          db.prepare(`DELETE FROM message WHERE session_id = ?`).run(fid);
-        }
         db.prepare(
           `INSERT OR REPLACE INTO session
            (id, project_id, parent_id, slug, directory, title, version, time_created, time_updated)

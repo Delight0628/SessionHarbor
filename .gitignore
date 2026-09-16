@@ -22,6 +22,7 @@ exports/
 sandbox-m0/
 sandbox-e2e/
 sandbox-mimo/
+sandbox-fork/
 cloud-data/
 cloud-data2/
 cloud-cli-test/

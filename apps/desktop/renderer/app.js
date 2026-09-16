@@ -448,6 +448,70 @@ $("#filter").addEventListener("keydown", (e) => e.key === "Enter" && loadList())
 $("#query").addEventListener("keydown", (e) => e.key === "Enter" && doSearch());
 $("#client").addEventListener("change", loadList);
 
+// ---------- 云账号 ----------
+async function cloudRefresh() {
+  const r = await harborApi().cloudAuth({ action: "me" });
+  if (r.error && !r.loggedIn) {
+    $("#cloudInfo").textContent = r.error || "未登录";
+    $("#cloudCodeRow").classList.add("hidden");
+    return r;
+  }
+  if (r.endpoint) $("#cloudEndpoint").value = r.endpoint;
+  if (r.loggedIn) {
+    $("#cloudInfo").textContent =
+      `已登录 ${r.email}\nplan=${r.plan}  userId=${r.userId}\n` +
+      `用量 sessions=${r.usage?.sessions ?? 0}  quota=${r.quota?.maxSessions ?? "-"}\n` +
+      `endpoint=${r.endpoint}`;
+    $("#cloudCodeRow").classList.add("hidden");
+  } else {
+    $("#cloudInfo").textContent = `未登录\nendpoint=${r.endpoint || ""}`;
+  }
+  return r;
+}
+
+async function cloudAuth(action) {
+  const opts = {
+    action,
+    endpoint: $("#cloudEndpoint").value.trim() || undefined,
+    email: $("#cloudEmail").value.trim() || undefined,
+    password: $("#cloudPassword").value || undefined,
+    code: $("#cloudCode").value.trim() || undefined,
+  };
+  const r = await harborApi().cloudAuth(opts);
+  if (r.error) {
+    $("#cloudInfo").textContent = r.error;
+    status(`云账号: ${r.error}`);
+    return r;
+  }
+  if (r.verifyCode) {
+    $("#cloudCodeRow").classList.remove("hidden");
+    $("#cloudCode").value = r.verifyCode;
+    status(`注册成功，验证码 ${r.verifyCode}（请验证邮箱）`);
+  } else if (action === "verify") {
+    status("邮箱验证成功");
+  } else if (action === "logout") {
+    status("已登出");
+  } else if (action === "login") {
+    status(
+      `登录成功 plan=${r.plan}${r.emailVerified === false ? "（邮箱未验证）" : ""}`,
+    );
+  }
+  await cloudRefresh();
+  return r;
+}
+
+$("#btnCloud").addEventListener("click", () => {
+  $("#cloudModal").classList.remove("hidden");
+  void cloudRefresh();
+});
+$("#cloudClose").addEventListener("click", () => {
+  $("#cloudModal").classList.add("hidden");
+});
+$("#cloudLogin").addEventListener("click", () => void cloudAuth("login"));
+$("#cloudRegister").addEventListener("click", () => void cloudAuth("register"));
+$("#cloudVerify").addEventListener("click", () => void cloudAuth("verify"));
+$("#cloudLogout").addEventListener("click", () => void cloudAuth("logout"));
+
 // 主进程自动扫描完成后刷新
 try {
   if (window.harbor?.onAutoScanDone) {

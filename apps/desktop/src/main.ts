@@ -18,6 +18,7 @@ import {
   pullFromCloud,
   formatSyncResult,
   loadOrCreateSyncConfig,
+  saveSyncConfig,
   resolveTarget,
   listCloudSessions,
   planDisplay,
@@ -479,6 +480,123 @@ ipcMain.handle("harbor:watchStop", () => {
   activeWatcher = null;
   return { ok: true };
 });
+
+function cloudBase(): string {
+  const cfg = loadOrCreateSyncConfig(WORKDIR);
+  const ep =
+    cfg.hostedEndpoint ||
+    process.env.HARBOR_CLOUD_URL ||
+    "http://127.0.0.1:8787";
+  return String(ep).replace(/\/+$/, "");
+}
+
+ipcMain.handle(
+  "harbor:cloudAuth",
+  async (
+    _e,
+    opts: {
+      action: "register" | "login" | "verify" | "me" | "logout";
+      endpoint?: string;
+      email?: string;
+      password?: string;
+      code?: string;
+    },
+  ) => {
+    const wd = WORKDIR;
+    const cfg = loadOrCreateSyncConfig(wd);
+    const base = (opts.endpoint || cloudBase()).replace(/\/+$/, "");
+    try {
+      if (opts.action === "register" || opts.action === "login") {
+        if (!opts.email || !opts.password) return { error: "需要邮箱和密码" };
+        const res = await fetch(`${base}/v1/auth/${opts.action}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: opts.email, password: opts.password }),
+        });
+        const body = (await res.json()) as {
+          error?: string;
+          token?: string;
+          userId?: string;
+          plan?: string;
+          emailVerified?: boolean;
+          verifyCode?: string;
+        };
+        if (!res.ok || !body.token) return { error: body.error || String(res.status) };
+        cfg.targetKind = "hosted";
+        cfg.hostedEndpoint = base;
+        cfg.hostedToken = body.token;
+        cfg.license = {
+          plan: (body.plan as "free" | "pro" | "team") || "free",
+          accountId: body.userId,
+          hostedEndpoint: base,
+          expiresAt: new Date(Date.now() + 365 * 86400000).toISOString(),
+        };
+        saveSyncConfig(wd, cfg);
+        return {
+          ok: true,
+          email: opts.email,
+          userId: body.userId,
+          plan: body.plan,
+          emailVerified: body.emailVerified,
+          verifyCode: body.verifyCode,
+          endpoint: base,
+        };
+      }
+      if (opts.action === "verify") {
+        if (!opts.email || !opts.code) return { error: "需要邮箱和验证码" };
+        const res = await fetch(`${base}/v1/auth/verify-email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: opts.email, code: opts.code }),
+        });
+        const body = (await res.json()) as { error?: string; token?: string };
+        if (!res.ok) return { error: body.error || String(res.status) };
+        cfg.hostedEndpoint = base;
+        if (body.token) cfg.hostedToken = body.token;
+        saveSyncConfig(wd, cfg);
+        return { ok: true, emailVerified: true };
+      }
+      if (opts.action === "logout") {
+        if (cfg.hostedToken) {
+          try {
+            await fetch(`${base}/v1/auth/logout`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${cfg.hostedToken}` },
+            });
+          } catch {
+            /* ignore */
+          }
+        }
+        delete cfg.hostedToken;
+        cfg.license = undefined;
+        saveSyncConfig(wd, cfg);
+        return { ok: true };
+      }
+      // me
+      if (!cfg.hostedToken || !cfg.hostedEndpoint) {
+        return { loggedIn: false, endpoint: base };
+      }
+      const res = await fetch(`${cfg.hostedEndpoint}/v1/auth/me`, {
+        headers: { Authorization: `Bearer ${cfg.hostedToken}` },
+      });
+      const body = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) {
+        return { loggedIn: false, endpoint: cfg.hostedEndpoint, error: "token 无效，请重新登录" };
+      }
+      return {
+        loggedIn: true,
+        endpoint: cfg.hostedEndpoint,
+        email: body.email,
+        userId: body.userId,
+        plan: body.plan,
+        usage: body.usage,
+        quota: body.quota,
+      };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
+  },
+);
 
 ipcMain.handle(
   "harbor:sync",

@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("harbor", {
   watchStart: () => ipcRenderer.invoke("harbor:watchStart"),
   watchStop: () => ipcRenderer.invoke("harbor:watchStop"),
   sync: (opts) => ipcRenderer.invoke("harbor:sync", opts),
+  cloudAuth: (opts) => ipcRenderer.invoke("harbor:cloudAuth", opts),
   onAutoScanDone: (cb) => {
     ipcRenderer.on("harbor:autoScanDone", (_e, payload) => {
       try {

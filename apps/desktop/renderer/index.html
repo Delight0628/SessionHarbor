@@ -524,6 +524,30 @@
     @media (prefers-reduced-motion: reduce) {
       * { transition: none !important; }
     }
+    /* 云账号弹层 */
+    .modal {
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center;
+    }
+    .modal.hidden { display: none; }
+    .modal-card {
+      width: min(420px, 92vw); background: var(--panel); border: 1px solid var(--line);
+      border-radius: 12px; padding: 16px 18px; box-shadow: 0 12px 40px rgba(0,0,0,.45);
+    }
+    .modal-card h3 { margin: 0 0 12px; font-size: 15px; }
+    .modal-card label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+    .modal-card input {
+      display: block; width: 100%; margin-top: 4px; box-sizing: border-box;
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+      border-radius: 6px; padding: 8px 10px; font: inherit;
+    }
+    .modal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .modal-info {
+      margin: 12px 0 0; padding: 8px; background: var(--bg-deep); border-radius: 6px;
+      font-size: 11px; color: var(--muted); white-space: pre-wrap; max-height: 120px; overflow: auto;
+    }
+    .hidden { display: none !important; }
+
   </style>
 </head>
 <body>
@@ -574,9 +598,35 @@
       </select>
       <button id="btnSync" class="ghost" title="加密推送到云">推送到云</button>
       <button id="btnPull" class="ghost" title="从云拉取到本地 vault">从云拉取</button>
+      <button id="btnCloud" class="ghost" title="托管云登录 / 验证邮箱">云账号</button>
     </div>
     <span id="clients" class="clients"></span>
   </header>
+  <div id="cloudModal" class="modal hidden" role="dialog" aria-label="云账号">
+    <div class="modal-card">
+      <h3>托管云账号</h3>
+      <label>服务端 endpoint
+        <input id="cloudEndpoint" placeholder="http://127.0.0.1:8787" />
+      </label>
+      <label>邮箱
+        <input id="cloudEmail" type="email" placeholder="you@x.com" />
+      </label>
+      <label>密码
+        <input id="cloudPassword" type="password" placeholder="至少 6 位" />
+      </label>
+      <label id="cloudCodeRow" class="hidden">验证码
+        <input id="cloudCode" placeholder="6 位验证码" />
+      </label>
+      <div class="modal-actions">
+        <button id="cloudLogin" class="primary">登录</button>
+        <button id="cloudRegister" class="ghost">注册</button>
+        <button id="cloudVerify" class="ghost">验证邮箱</button>
+        <button id="cloudLogout" class="ghost">登出</button>
+        <button id="cloudClose" class="ghost">关闭</button>
+      </div>
+      <pre id="cloudInfo" class="modal-info">未登录</pre>
+    </div>
+  </div>
   <main>
     <aside>
       <div class="list-head">

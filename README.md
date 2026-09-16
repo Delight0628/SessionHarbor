@@ -139,6 +139,18 @@ SessionHarbor/
 └─ scripts/                  # E2E、压测、打包
 ```
 
+### 分叉（Fork）与压缩迁移策略
+
+各客户端分叉/压缩模型不同，迁移按 IR `parentItemId` 建树：
+
+| 策略 | 说明 |
+|---|---|
+| **主链** | 取最深路径写入目标会话，保证可 resume |
+| **分叉** | 兄弟分支不交错写入主 transcript；另建目标侧 fork 会话（如 MiMo `session.parent_id`） |
+| **压缩边界** | checkpoint（compact/摘要）落成 system 消息，避免历史被静默截断 |
+
+验证：`pnpm e2e:fork`（WorkBuddy 兄弟分叉 → MiMo 主链 + fork #1 + parentID 链）。
+
 ## 下载便携版
 
 Windows 便携版 **不随源码仓库托管**（避免将大二进制塞进 git），请从 **[Releases](https://github.com/Delight0628/SessionHarbor/releases)** 下载 `SessionHarbor.exe`。

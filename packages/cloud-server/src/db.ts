@@ -60,7 +60,10 @@ export class CloudDatabase {
         plan TEXT NOT NULL DEFAULT 'free',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
-        disabled INTEGER NOT NULL DEFAULT 0
+        disabled INTEGER NOT NULL DEFAULT 0,
+        email_verified INTEGER NOT NULL DEFAULT 0,
+        verify_code TEXT,
+        verify_expires INTEGER
       );
       CREATE TABLE IF NOT EXISTS tokens (
         token_hash TEXT PRIMARY KEY,
@@ -71,13 +74,31 @@ export class CloudDatabase {
       );
       CREATE INDEX IF NOT EXISTS idx_tokens_user ON tokens(user_id);
     `);
+    // 旧库升级
+    for (const col of [
+      "email_verified INTEGER NOT NULL DEFAULT 0",
+      "verify_code TEXT",
+      "verify_expires INTEGER",
+    ]) {
+      try {
+        this.db.exec(`ALTER TABLE users ADD COLUMN ${col}`);
+      } catch {
+        /* exists */
+      }
+    }
   }
 
   close(): void {
     this.db.close();
   }
 
-  register(email: string, password: string): { userId: string; token: string; plan: PlanId } {
+  register(email: string, password: string): {
+    userId: string;
+    token: string;
+    plan: PlanId;
+    emailVerified: boolean;
+    verifyCode?: string;
+  } {
     if (!email.includes("@")) throw new ApiError("邮箱格式不正确", 400);
     if (password.length < 6) throw new ApiError("密码至少 6 位", 400);
     const exists = this.db.prepare(`SELECT id FROM users WHERE email = ?`).get(email);
@@ -85,19 +106,42 @@ export class CloudDatabase {
     const userId = randomBytes(16).toString("hex");
     const salt = randomBytes(16);
     const now = Date.now();
+    const code = String(Math.floor(100000 + Math.random() * 900000));
     this.db
       .prepare(
-        `INSERT INTO users (id, email, password_hash, password_salt, plan, created_at, updated_at, disabled)
-         VALUES (?, ?, ?, ?, 'free', ?, ?, 0)`,
+        `INSERT INTO users
+         (id, email, password_hash, password_salt, plan, created_at, updated_at, disabled,
+          email_verified, verify_code, verify_expires)
+         VALUES (?, ?, ?, ?, 'free', ?, ?, 0, 0, ?, ?)`,
       )
-      .run(userId, email, hashPassword(password, salt), salt.toString("base64"), now, now);
-    return { userId, token: this.issueToken(userId), plan: "free" };
+      .run(
+        userId,
+        email,
+        hashPassword(password, salt),
+        salt.toString("base64"),
+        now,
+        now,
+        code,
+        now + 24 * 3600 * 1000,
+      );
+    return {
+      userId,
+      token: this.issueToken(userId),
+      plan: "free",
+      emailVerified: false,
+      verifyCode: code,
+    };
   }
 
-  login(email: string, password: string): { userId: string; token: string; plan: PlanId } {
+  login(email: string, password: string): {
+    userId: string;
+    token: string;
+    plan: PlanId;
+    emailVerified: boolean;
+  } {
     const row = this.db
       .prepare(
-        `SELECT id, password_hash, password_salt, plan, disabled FROM users WHERE email = ?`,
+        `SELECT id, password_hash, password_salt, plan, disabled, email_verified FROM users WHERE email = ?`,
       )
       .get(email) as
       | {
@@ -106,6 +150,7 @@ export class CloudDatabase {
           password_salt: string;
           plan: string;
           disabled: number;
+          email_verified: number;
         }
       | undefined;
     if (!row) throw new ApiError("邮箱或密码错误", 401);
@@ -114,7 +159,64 @@ export class CloudDatabase {
     if (!verifyPassword(password, salt, row.password_hash)) {
       throw new ApiError("邮箱或密码错误", 401);
     }
-    return { userId: row.id, token: this.issueToken(row.id), plan: (row.plan as PlanId) || "free" };
+    return {
+      userId: row.id,
+      token: this.issueToken(row.id),
+      plan: (row.plan as PlanId) || "free",
+      emailVerified: Boolean(row.email_verified),
+    };
+  }
+
+  verifyEmail(email: string, code: string): { userId: string; token: string } {
+    const row = this.db
+      .prepare(
+        `SELECT id, verify_code, verify_expires, email_verified FROM users WHERE email = ?`,
+      )
+      .get(email) as
+      | { id: string; verify_code: string | null; verify_expires: number | null; email_verified: number }
+      | undefined;
+    if (!row) throw new ApiError("用户不存在", 404);
+    if (row.email_verified) {
+      return { userId: row.id, token: this.issueToken(row.id) };
+    }
+    if (!row.verify_code || row.verify_code !== code) throw new ApiError("验证码不正确", 400);
+    if (row.verify_expires && Date.now() > row.verify_expires) {
+      throw new ApiError("验证码已过期，请重新获取", 400);
+    }
+    this.db
+      .prepare(
+        `UPDATE users SET email_verified = 1, verify_code = NULL, verify_expires = NULL, updated_at = ? WHERE id = ?`,
+      )
+      .run(Date.now(), row.id);
+    return { userId: row.id, token: this.issueToken(row.id) };
+  }
+
+  resendVerifyCode(email: string): { code: string } {
+    const row = this.db
+      .prepare(`SELECT id, email_verified FROM users WHERE email = ?`)
+      .get(email) as { id: string; email_verified: number } | undefined;
+    if (!row) throw new ApiError("用户不存在", 404);
+    if (row.email_verified) throw new ApiError("邮箱已验证", 400);
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    this.db
+      .prepare(`UPDATE users SET verify_code = ?, verify_expires = ?, updated_at = ? WHERE id = ?`)
+      .run(code, Date.now() + 24 * 3600 * 1000, Date.now(), row.id);
+    return { code };
+  }
+
+  isEmailVerified(userId: string): boolean {
+    const row = this.db
+      .prepare(`SELECT email_verified FROM users WHERE id = ?`)
+      .get(userId) as { email_verified: number } | undefined;
+    return Boolean(row?.email_verified);
+  }
+
+  adminMarkVerified(userId: string): void {
+    this.db
+      .prepare(
+        `UPDATE users SET email_verified = 1, verify_code = NULL, verify_expires = NULL, updated_at = ? WHERE id = ?`,
+      )
+      .run(Date.now(), userId);
   }
 
   changePassword(
@@ -229,17 +331,21 @@ export class CloudDatabase {
     plan: string;
     disabled: number;
     created_at: number;
+    email_verified: number;
     sessions: number;
     storageMb: number;
   }> {
     const rows = this.db
-      .prepare(`SELECT id, email, plan, disabled, created_at FROM users ORDER BY created_at DESC`)
+      .prepare(
+        `SELECT id, email, plan, disabled, created_at, email_verified FROM users ORDER BY created_at DESC`,
+      )
       .all() as Array<{
       id: string;
       email: string;
       plan: string;
       disabled: number;
       created_at: number;
+      email_verified: number;
     }>;
     return rows.map((r) => {
       const u = this.usage(r.id);

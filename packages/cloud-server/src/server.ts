@@ -12,6 +12,7 @@ import https from "node:https";
 import fs from "node:fs";
 import path from "node:path";
 import { ApiError, CloudDatabase, atomicWrite, quotaOf, safeRel } from "./db.js";
+import { loadMailConfig, sendVerifyCode } from "./mailer.js";
 
 const PORT = Number(process.env.HARBOR_CLOUD_PORT || 8787);
 const DATA = path.resolve(
@@ -20,6 +21,9 @@ const DATA = path.resolve(
 const ADMIN_TOKEN = process.env.HARBOR_CLOUD_ADMIN_TOKEN || "";
 const TLS_CERT = process.env.HARBOR_CLOUD_TLS_CERT || "";
 const TLS_KEY = process.env.HARBOR_CLOUD_TLS_KEY || "";
+const REQUIRE_EMAIL_VERIFY =
+  String(process.env.HARBOR_CLOUD_REQUIRE_EMAIL_VERIFY || "").toLowerCase() === "1" ||
+  String(process.env.HARBOR_CLOUD_REQUIRE_EMAIL_VERIFY || "").toLowerCase() === "true";
 
 /** 简单滑动窗口限流：key → 时间戳列表 */
 class RateLimiter {
@@ -106,6 +110,7 @@ function requireAdmin(req: http.IncomingMessage) {
 
 export function createCloudServer(dataRoot: string) {
   const db = new CloudDatabase(dataRoot);
+  const mail = loadMailConfig(dataRoot);
 
   const handler = async (req: http.IncomingMessage, res: http.ServerResponse) => {
     metrics.requests++;
@@ -151,6 +156,14 @@ export function createCloudServer(dataRoot: string) {
         json(res, 200, { ok: true });
         return;
       }
+      if (p === "/v1/admin/verify-email" && method === "POST") {
+        requireAdmin(req);
+        const body = JSON.parse(await readBody(req)) as { userId?: string };
+        if (!body.userId) throw new ApiError("缺少 userId", 400);
+        db.adminMarkVerified(String(body.userId));
+        json(res, 200, { ok: true });
+        return;
+      }
 
       // ---------- auth（限流） ----------
       if (p === "/v1/auth/register" || p === "/v1/auth/login" || p === "/v1/auth/change-password") {
@@ -165,8 +178,56 @@ export function createCloudServer(dataRoot: string) {
       }
       if (p === "/v1/auth/register" && method === "POST") {
         const body = JSON.parse(await readBody(req)) as { email?: string; password?: string };
-        const r = db.register(String(body.email || "").toLowerCase().trim(), String(body.password || ""));
-        json(res, 201, r);
+        const email = String(body.email || "").toLowerCase().trim();
+        const r = db.register(email, String(body.password || ""));
+        try {
+          await sendVerifyCode(mail, email, r.verifyCode || "");
+        } catch (e) {
+          console.error("[mail] send failed", e);
+        }
+        // 开发/内网：console/file 模式把 code 回传，便于联调
+        const expose =
+          mail.mode === "console" || mail.mode === "file" ? r.verifyCode : undefined;
+        json(res, 201, {
+          userId: r.userId,
+          token: r.token,
+          plan: r.plan,
+          emailVerified: r.emailVerified,
+          verifyCode: expose,
+        });
+        return;
+      }
+      if (p === "/v1/auth/verify-email" && method === "POST") {
+        const rl = authLimiter.check(`${ip}:${p}`);
+        if (!rl.ok) {
+          metrics.rateLimited++;
+          json(res, 429, { error: "请求过于频繁，请稍后再试" });
+          return;
+        }
+        const body = JSON.parse(await readBody(req)) as { email?: string; code?: string };
+        const r = db.verifyEmail(String(body.email || "").toLowerCase().trim(), String(body.code || ""));
+        json(res, 200, { ok: true, ...r, emailVerified: true });
+        return;
+      }
+      if (p === "/v1/auth/resend-verify" && method === "POST") {
+        const rl = authLimiter.check(`${ip}:${p}`);
+        if (!rl.ok) {
+          metrics.rateLimited++;
+          json(res, 429, { error: "请求过于频繁，请稍后再试" });
+          return;
+        }
+        const body = JSON.parse(await readBody(req)) as { email?: string };
+        const email = String(body.email || "").toLowerCase().trim();
+        const r = db.resendVerifyCode(email);
+        try {
+          await sendVerifyCode(mail, email, r.code);
+        } catch (e) {
+          console.error("[mail] send failed", e);
+        }
+        json(res, 200, {
+          ok: true,
+          verifyCode: mail.mode === "console" || mail.mode === "file" ? r.code : undefined,
+        });
         return;
       }
       if (p === "/v1/auth/login" && method === "POST") {
@@ -253,6 +314,10 @@ export function createCloudServer(dataRoot: string) {
 
           if (method === "PUT") {
             metrics.syncPut++;
+            if (REQUIRE_EMAIL_VERIFY && !db.isEmailVerified(user.userId)) {
+              json(res, 403, { error: "请先验证邮箱后再同步", code: "EMAIL_NOT_VERIFIED" });
+              return;
+            }
             const body = await readBody(req);
             if (rel.endsWith(".harbor.enc.json")) {
               const usage = db.usage(user.userId);
@@ -320,6 +385,8 @@ if (isMain) {
     console.log(`SessionHarbor Cloud  ${scheme}://127.0.0.1:${PORT}`);
     console.log(`数据目录: ${DATA}`);
     console.log(`管理端: ${ADMIN_TOKEN ? "已启用 (HARBOR_CLOUD_ADMIN_TOKEN)" : "未设置 ADMIN_TOKEN"}`);
+    console.log(`邮件通道: ${process.env.HARBOR_CLOUD_MAIL || "console"}`);
+    console.log(`强制邮箱验证: ${REQUIRE_EMAIL_VERIFY ? "开" : "关"}`);
     console.log(`TLS: ${useTls ? "已启用" : "未启用（生产建议 Nginx/Caddy 反代）"}`);
   });
 }

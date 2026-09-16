@@ -93,6 +93,27 @@
 
 环境变量：`HARBOR_CLOUD_ADMIN_TOKEN`（管理端）、`HARBOR_CLOUD_TLS_CERT`/`_KEY`（可选内置 TLS）。
 
+### 邮箱验证
+
+| 变量 | 说明 |
+|---|---|
+| HARBOR_CLOUD_MAIL | console（默认，日志打印验证码）/ file（写 data/mail）/ webhook / off |
+| HARBOR_CLOUD_MAIL_WEBHOOK | webhook 通道 URL，POST `{to,subject,text}` |
+| HARBOR_CLOUD_REQUIRE_EMAIL_VERIFY | `1` 时未验证用户禁止 sync PUT（403 EMAIL_NOT_VERIFIED） |
+
+接口：`POST /v1/auth/verify-email` `{email,code}`；`POST /v1/auth/resend-verify` `{email}`。  
+CLI：`harbor verify-email`；管理端可 `harbor admin verify --user <id>`。
+
+### 管理 CLI
+
+```powershell
+harbor admin users   --admin-token <T> --endpoint http://host:8787
+harbor admin plan    --user <userId> --plan pro --admin-token <T>
+harbor admin disable --user <userId> --admin-token <T>
+harbor admin enable  --user <userId> --admin-token <T>
+harbor admin verify  --user <userId> --admin-token <T>
+```
+
 限流：登录/注册/改密 10/min/IP；同步 300/min/IP；超限 429。
 
 ## 部署

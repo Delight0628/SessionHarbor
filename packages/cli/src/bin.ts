@@ -208,6 +208,8 @@ function help(): void {
   harbor whoami                                               查看托管云账号/额度
   harbor change-password --old P1 --new P2                   修改密码并吊销旧 token
   harbor logout                                               登出并清除本地 token
+  harbor verify-email --email E --code 123456                验证邮箱
+  harbor admin users|plan|disable|enable|verify [--admin-token T] [--endpoint URL]
   # 启动本地云端: node packages/cloud-server/dist/server.js
 
 全局选项:
@@ -879,6 +881,144 @@ async function cmdLogout(args: Record<string, string | boolean | string[]>): Pro
   return 0;
 }
 
+async function cmdVerifyEmail(args: Record<string, string | boolean | string[]>, positional: string[]): Promise<number> {
+  const email = String(args.email ?? positional[0] ?? "");
+  const code = String(args.code ?? positional[1] ?? "");
+  if (!email || !code) {
+    console.error("用法: harbor verify-email --email you@x.com --code 123456 [--endpoint URL]");
+    return 2;
+  }
+  const ep = await cloudEndpoint(args);
+  const res = await fetch(`${ep}/v1/auth/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, code }),
+  });
+  const body = (await res.json()) as { error?: string; token?: string };
+  if (!res.ok) {
+    console.error(`验证失败: ${body.error || res.status}`);
+    return 1;
+  }
+  const wd = workdir(args);
+  const cfg = loadOrCreateSyncConfig(wd);
+  cfg.targetKind = "hosted";
+  cfg.hostedEndpoint = ep;
+  if (body.token) cfg.hostedToken = body.token;
+  saveSyncConfig(wd, cfg);
+  console.log("邮箱验证成功");
+  return 0;
+}
+
+function adminToken(args: Record<string, string | boolean | string[]>): string {
+  const t =
+    (args["admin-token"] as string) ||
+    process.env.HARBOR_CLOUD_ADMIN_TOKEN ||
+    "";
+  if (!t) {
+    throw new Error("需要 --admin-token 或环境变量 HARBOR_CLOUD_ADMIN_TOKEN");
+  }
+  return t;
+}
+
+async function cmdAdmin(args: Record<string, string | boolean | string[]>, positional: string[]): Promise<number> {
+  const sub = String(positional[0] || "users").toLowerCase();
+  const ep = await cloudEndpoint(args);
+  const tok = adminToken(args);
+  const H = { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" };
+
+  if (sub === "users" || sub === "list") {
+    const res = await fetch(`${ep}/v1/admin/users`, { headers: H });
+    const body = (await res.json()) as {
+      error?: string;
+      users?: Array<{
+        id: string;
+        email: string;
+        plan: string;
+        disabled: number;
+        email_verified: number;
+        sessions: number;
+        storageMb: number;
+      }>;
+    };
+    if (!res.ok) {
+      console.error(body.error || res.status);
+      return 1;
+    }
+    console.log(`${body.users?.length || 0} 个用户`);
+    for (const u of body.users || []) {
+      console.log(
+        `${u.id}  ${u.email}  plan=${u.plan}  verified=${u.email_verified ? "Y" : "N"}  disabled=${u.disabled ? "Y" : "N"}  sessions=${u.sessions}  ${u.storageMb}MB`,
+      );
+    }
+    return 0;
+  }
+
+  if (sub === "plan") {
+    const userId = String(args.user ?? positional[1] ?? "");
+    const plan = String(args.plan ?? positional[2] ?? "");
+    if (!userId || !plan) {
+      console.error("用法: harbor admin plan --user <userId> --plan free|pro|team");
+      return 2;
+    }
+    const res = await fetch(`${ep}/v1/admin/plan`, {
+      method: "POST",
+      headers: H,
+      body: JSON.stringify({ userId, plan }),
+    });
+    const body = (await res.json()) as { error?: string; ok?: boolean };
+    if (!res.ok) {
+      console.error(body.error || res.status);
+      return 1;
+    }
+    console.log(`已设置 plan=${plan} user=${userId}`);
+    return 0;
+  }
+
+  if (sub === "disable" || sub === "enable") {
+    const userId = String(args.user ?? positional[1] ?? "");
+    if (!userId) {
+      console.error("用法: harbor admin disable|enable --user <userId>");
+      return 2;
+    }
+    const res = await fetch(`${ep}/v1/admin/disable`, {
+      method: "POST",
+      headers: H,
+      body: JSON.stringify({ userId, disabled: sub === "disable" }),
+    });
+    const body = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      console.error(body.error || res.status);
+      return 1;
+    }
+    console.log(sub === "disable" ? `已禁用 ${userId}` : `已启用 ${userId}`);
+    return 0;
+  }
+
+  if (sub === "verify") {
+    const userId = String(args.user ?? positional[1] ?? "");
+    if (!userId) {
+      console.error("用法: harbor admin verify --user <userId>");
+      return 2;
+    }
+    const res = await fetch(`${ep}/v1/admin/verify-email`, {
+      method: "POST",
+      headers: H,
+      body: JSON.stringify({ userId }),
+    });
+    const body = (await res.json()) as { error?: string };
+    if (!res.ok) {
+      console.error(body.error || res.status);
+      return 1;
+    }
+    console.log(`已标记邮箱验证 ${userId}`);
+    return 0;
+  }
+
+  console.error(`未知 admin 子命令: ${sub}`);
+  console.error("子命令: users | plan | disable | enable | verify");
+  return 2;
+}
+
 async function main(): Promise<void> {
   const { args, positional } = parseArgs(process.argv.slice(2));
   const cmd = positional[0] || String(args._ ?? "") || "help";
@@ -931,6 +1071,12 @@ async function main(): Promise<void> {
         break;
       case "logout":
         process.exit(await cmdLogout(args));
+        break;
+      case "verify-email":
+        process.exit(await cmdVerifyEmail(args, positional.slice(1)));
+        break;
+      case "admin":
+        process.exit(await cmdAdmin(args, positional.slice(1)));
         break;
       case "pricing":
         console.log(formatPricing());

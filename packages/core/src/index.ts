@@ -15,3 +15,4 @@ export * from "./detect.js";
 export * from "./crypto.js";
 export * from "./sync.js";
 export * from "./billing.js";
+export * from "./fork.js";

@@ -4,6 +4,7 @@ import { isoToMs, msToAlinkStr } from "../time.js";
 import { scanText, redactText } from "../secrets.js";
 import { contentHashOf, entryFromIR, identityKeyOf, analyzeDedup } from "../dedup.js";
 import { pairingStats } from "../migrate.js";
+import { planForkSessions } from "../fork.js";
 import { stripReminders } from "../text.js";
 import { claudeCwdEncode, wbCwdEncode } from "../paths.js";
 
@@ -171,5 +172,45 @@ describe("pairingStats", () => {
     expect(ps.paired).toBe(1);
     expect(ps.orphanCalls).toHaveLength(1);
     expect(ps.orphanOutputs).toHaveLength(1);
+  });
+});
+
+describe("fork planner", () => {
+  it("splits sibling branches into fork sessions", () => {
+    const msg = (id: string, text: string, parent?: string) => ({
+      type: "message" as const,
+      itemId: id,
+      role: "user" as const,
+      content: [{ type: "text" as const, text }],
+      parentItemId: parent,
+    });
+    const ir = {
+      header: createHeader({
+        id: "f",
+        sourceClient: "wb",
+        sourceSessionId: "f",
+        title: "ForkTest",
+      }),
+      items: [
+        msg("a", "hello"),
+        msg("b", "answer", "a"),
+        msg("c1", "branch one", "b"),
+        msg("c2", "branch two", "b"),
+        msg("d1", "continue one", "c1"),
+      ],
+    };
+    const { main, forks } = planForkSessions(ir);
+    const mainTexts = main.items
+      .filter((i) => i.type === "message")
+      .map((i) => (i.type === "message" ? i.content.map((c) => (c.type === "text" ? c.text : "")).join("") : ""));
+    expect(mainTexts).toContain("continue one");
+    expect(mainTexts).not.toContain("branch two");
+    expect(forks.length).toBeGreaterThanOrEqual(1);
+    const forkText = forks[0]!.ir.items
+      .filter((i) => i.type === "message")
+      .map((i) => (i.type === "message" ? i.content.map((c) => (c.type === "text" ? c.text : "")).join("") : ""))
+      .join("|");
+    expect(forkText).toContain("hello");
+    expect(forkText).toContain("branch two");
   });
 });

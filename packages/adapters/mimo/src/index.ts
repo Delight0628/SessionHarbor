@@ -14,6 +14,8 @@ import {
   openRo,
   openRw,
   extractTextFromContent,
+  planForkSessions,
+  applyCompactionPolicy,
   type Adapter,
   type ClientPathsLike,
   type HarborIR,
@@ -335,7 +337,14 @@ export class MimoAdapter implements Adapter {
 
   async writeSession(ir: HarborIR, opts?: { overwrite?: boolean }): Promise<WriteResult> {
     const p = this.ensure();
-    const s = ir.header.session;
+    // 分叉拆分：只把主链写进本会话；其余分支写成 parent_id 关联的 fork 会话
+    const { main, forks } = planForkSessions(ir);
+    const compacted = {
+      header: main.header,
+      items: applyCompactionPolicy(main.items, "keep-all"),
+    };
+
+    const s = compacted.header.session;
     let sessionId = s.sourceSessionId || s.id;
     if (!String(sessionId).startsWith("ses_")) {
       sessionId = `ses_${String(sessionId).replace(/-/g, "").slice(0, 24)}`;
@@ -343,14 +352,18 @@ export class MimoAdapter implements Adapter {
     const createdMs = s.createdAt ? Date.parse(s.createdAt) : nowMs();
     const updatedMs = s.updatedAt ? Date.parse(s.updatedAt) : createdMs;
     const directory = s.cwd || process.cwd();
-    const projectId = (ir.header.extensions?.projectId as string) || "global";
+    const projectId = (compacted.header.extensions?.projectId as string) || "global";
 
     const db = openRw(p.primaryDb!);
     try {
       ensureSchema(db);
       const existing = db.prepare(`SELECT 1 FROM session WHERE id = ?`).get(sessionId);
       if (existing && !opts?.overwrite) {
-        return { status: "skipped", sessionId, reason: "session exists" };
+        return {
+          status: "skipped",
+          sessionId,
+          reason: "session exists（可用 --overwrite 重写；分叉会另建 fork 会话）",
+        };
       }
 
       db.exec(`BEGIN`);
@@ -371,75 +384,46 @@ export class MimoAdapter implements Adapter {
       ).run(
         sessionId,
         projectId,
-        (ir.header.extensions?.slug as string) || slugify(s.title),
+        (compacted.header.extensions?.slug as string) || slugify(s.title),
         directory,
         s.title || sessionId,
-        (ir.header.extensions?.version as string) || "sessionharbor-0.1",
+        (compacted.header.extensions?.version as string) || "sessionharbor-0.1",
         createdMs,
         updatedMs,
       );
 
-      let inserted = 0;
-      let parentId: string | null = null;
-      for (const item of ir.items) {
-        if (item.type !== "message") {
-          if (item.type === "thinking") {
-            const ts = item.timestamp ? Date.parse(item.timestamp) : updatedMs;
-            const msgId = newId("msg");
-            const data = {
-              role: "assistant",
-              time: { created: ts },
-              agent: "migrate",
-              parentID: parentId,
-            };
-            db.prepare(
-              `INSERT INTO message (id, session_id, agent_id, time_created, time_updated, data)
-               VALUES (?, ?, 'main', ?, ?, ?)`,
-            ).run(msgId, sessionId, ts, ts, JSON.stringify(data));
-            db.prepare(
-              `INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
-               VALUES (?, ?, ?, ?, ?, ?)`,
-            ).run(
-              newId("prt"),
-              msgId,
-              sessionId,
-              ts,
-              ts,
-              JSON.stringify({ type: "text", text: `[thinking] ${item.text}`, synthetic: true }),
-            );
-            inserted++;
-          }
-          continue;
+      const inserted = this.insertMessageChain(db, sessionId, compacted.items, s, updatedMs);
+
+      // 写 fork 会话（parent_id 指向主会话，标题带 fork #n）
+      let forkCount = 0;
+      for (const fk of forks) {
+        let fid = fk.ir.header.session.sourceSessionId || fk.ir.header.session.id;
+        if (!String(fid).startsWith("ses_")) {
+          fid = `ses_${String(fid).replace(/-/g, "").slice(0, 24)}`;
         }
-        const text = item.content
-          .map((b) => (b.type === "text" ? b.text : ""))
-          .filter(Boolean)
-          .join("\n");
-        if (!text.trim()) continue;
-        const ts = item.timestamp ? Date.parse(item.timestamp) : updatedMs;
-        const role = item.role === "system" ? "system" : item.role;
-        const msgId =
-          item.itemId?.startsWith("msg_") && !opts?.overwrite
-            ? `msg_${randomUUID().replace(/-/g, "").slice(0, 20).toUpperCase()}`
-            : newId("msg");
-        const data: Json = {
-          role,
-          time: { created: ts },
-          agent: "migrate",
-        };
-        if (item.model) data.model = { providerID: "migrated", modelID: item.model };
-        if (role === "assistant" && parentId) data.parentID = parentId;
-        if (role === "user") data.system = `迁移自 ${s.sourceClient} 的对话记录`;
+        const fExists = db.prepare(`SELECT 1 FROM session WHERE id = ?`).get(fid);
+        if (fExists && !opts?.overwrite) continue;
+        if (fExists && opts?.overwrite) {
+          db.prepare(`DELETE FROM part WHERE session_id = ?`).run(fid);
+          db.prepare(`DELETE FROM message WHERE session_id = ?`).run(fid);
+        }
         db.prepare(
-          `INSERT INTO message (id, session_id, agent_id, time_created, time_updated, data)
-           VALUES (?, ?, 'main', ?, ?, ?)`,
-        ).run(msgId, sessionId, ts, ts, JSON.stringify(data));
-        db.prepare(
-          `INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-        ).run(newId("prt"), msgId, sessionId, ts, ts, JSON.stringify({ type: "text", text, synthetic: false }));
-        if (role === "user") parentId = msgId;
-        inserted++;
+          `INSERT OR REPLACE INTO session
+           (id, project_id, parent_id, slug, directory, title, version, time_created, time_updated)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
+          fid,
+          projectId,
+          sessionId,
+          slugify(fk.ir.header.session.title),
+          directory,
+          fk.ir.header.session.title,
+          "sessionharbor-0.1-fork",
+          createdMs,
+          updatedMs,
+        );
+        this.insertMessageChain(db, fid, fk.ir.items, fk.ir.header.session, updatedMs);
+        forkCount++;
       }
 
       db.exec(`COMMIT`);
@@ -447,7 +431,13 @@ export class MimoAdapter implements Adapter {
         status: "ok",
         sessionId,
         messageCount: inserted,
-        detail: { projectId, directory, title: s.title },
+        detail: {
+          projectId,
+          directory,
+          title: s.title,
+          forksWritten: forkCount,
+          mainPathLength: compacted.items.filter((i) => i.type === "message").length,
+        },
       };
     } catch (e) {
       try {
@@ -463,6 +453,121 @@ export class MimoAdapter implements Adapter {
     } finally {
       db.close();
     }
+  }
+
+  /** 按顺序插入 message/part，并维护 parentID 链（每条消息都挂上一跳） */
+  private insertMessageChain(
+    db: ReturnType<typeof openRw>,
+    sessionId: string,
+    items: HarborItem[],
+    sessionMeta: { sourceClient: string; model?: string },
+    fallbackTs: number,
+  ): number {
+    let inserted = 0;
+    let lastMsgId: string | null = null;
+    const idMap = new Map<string, string>(); // ir itemId -> mimo msg id
+
+    for (const item of items) {
+      if (item.type === "checkpoint") {
+        // 压缩/产物边界：写成 system 消息，避免历史被「抹掉」
+        const ts = fallbackTs;
+        const msgId = newId("msg");
+        db.prepare(
+          `INSERT INTO message (id, session_id, agent_id, time_created, time_updated, data)
+           VALUES (?, ?, 'main', ?, ?, ?)`,
+        ).run(
+          msgId,
+          sessionId,
+          ts,
+          ts,
+          JSON.stringify({
+            role: "system",
+            time: { created: ts },
+            agent: "migrate",
+            parentID: lastMsgId,
+            summary: item.label,
+          }),
+        );
+        db.prepare(
+          `INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        ).run(
+          newId("prt"),
+          msgId,
+          sessionId,
+          ts,
+          ts,
+          JSON.stringify({
+            type: "text",
+            text: `[${item.label}]\n${item.files.map((f) => `- ${f}`).join("\n")}`,
+            synthetic: true,
+          }),
+        );
+        if (item.itemId) idMap.set(item.itemId, msgId);
+        lastMsgId = msgId;
+        inserted++;
+        continue;
+      }
+
+      let text = "";
+      let role: string = "assistant";
+      if (item.type === "message") {
+        role = item.role === "system" ? "system" : item.role;
+        text = item.content
+          .map((b) => (b.type === "text" ? b.text : ""))
+          .filter(Boolean)
+          .join("\n");
+      } else if (item.type === "thinking") {
+        role = "assistant";
+        text = `[thinking] ${item.text}`;
+      } else if (item.type === "tool_call") {
+        role = "assistant";
+        text = `[tool:${item.toolName}] ${JSON.stringify(item.input).slice(0, 400)}`;
+      } else if (item.type === "tool_output") {
+        role = "assistant";
+        text = `[tool_result] ${item.output}`;
+      }
+      if (!text.trim()) continue;
+
+      const ts =
+        "timestamp" in item && item.timestamp ? Date.parse(item.timestamp) : fallbackTs;
+      const msgId = newId("msg");
+      // parent：优先 IR parent 映射，否则上一条
+      const irParent =
+        "parentItemId" in item && item.parentItemId ? idMap.get(item.parentItemId) : undefined;
+      const parentID = irParent || lastMsgId;
+
+      const data: Json = {
+        role,
+        time: { created: ts },
+        agent: "migrate",
+      };
+      if (parentID) data.parentID = parentID;
+      if (item.type === "message" && item.model) {
+        data.model = { providerID: "migrated", modelID: item.model };
+      }
+      if (role === "user") data.system = `迁移自 ${sessionMeta.sourceClient} 的对话记录`;
+
+      db.prepare(
+        `INSERT INTO message (id, session_id, agent_id, time_created, time_updated, data)
+         VALUES (?, ?, 'main', ?, ?, ?)`,
+      ).run(msgId, sessionId, ts, ts, JSON.stringify(data));
+      db.prepare(
+        `INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      ).run(
+        newId("prt"),
+        msgId,
+        sessionId,
+        ts,
+        ts,
+        JSON.stringify({ type: "text", text, synthetic: item.type !== "message" }),
+      );
+      if ("itemId" in item && item.itemId) idMap.set(item.itemId, msgId);
+      lastMsgId = msgId;
+      inserted++;
+    }
+    return inserted;
   }
 }
 

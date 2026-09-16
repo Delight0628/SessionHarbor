@@ -75,7 +75,7 @@ SessionHarbor 提供本地优先的统一层：**发现 → 索引 → 检索 �
 | Devin / TRAE SOLO | ✅ | ✅ | 桌面客户端库 |
 | ChatGPT Export | ✅ | — | 官方 conversations.json 导入 |
 
-> 具体能力以各 adapter 的 `capabilities` 为准；内网客户端（领慧 / WorkBuddy）适合企业私有化部署。
+> 具体能力以各 adapter 的 `capabilities` 为准。
 
 ## 架构一览
 
@@ -261,7 +261,6 @@ $harbor dedup
 | [docs/ADR-001-node-sqlite.md](./docs/ADR-001-node-sqlite.md) | 为何使用 `node:sqlite` |
 | [docs/ADR-002-e2ee-sync.md](./docs/ADR-002-e2ee-sync.md) | 端到端加密同步设计 |
 | [docs/team-library-schema.md](./docs/team-library-schema.md) | 团队会话库 Schema |
-| [docs/enterprise-deploy.md](./docs/enterprise-deploy.md) | 企业内网部署 |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | 贡献指南 |
 | [SECURITY.md](./SECURITY.md) | 安全披露 |
 | [CHANGELOG.md](./CHANGELOG.md) | 变更记录 |
@@ -293,7 +292,7 @@ pnpm pack:exe
 - **M0** 领慧 ↔ Claude Code 双向互转 ✅
 - **M1** 多客户端聚合 + FTS 搜索 + 迁移向导 ✅
 - **M2** Electron GUI、watcher、脱敏/去重、打包分发 ✅（持续打磨）
-- **M3** E2EE 云同步完善、团队库、企业内网版 🔜
+- **M3** E2EE 云同步完善、团队库 🔜
 
 欢迎在 [Issues](https://github.com/Delight0628/SessionHarbor/issues) 提需求与客户端适配请求。
 

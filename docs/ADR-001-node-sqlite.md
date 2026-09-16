@@ -8,7 +8,7 @@
 
 ## 背景
 
-SessionHarbor 需要 SQLite + FTS5（trigram 中文分词）做本地会话索引。原计划 better-sqlite3（成熟、性能好），但它是 **native addon**，在企业内网/无编译工具链的 Windows 机器上安装失败率高，与「零原生依赖、内网友好」目标冲突。
+SessionHarbor 需要 SQLite + FTS5（trigram 中文分词）做本地会话索引。原计划 better-sqlite3（成熟、性能好），但它是 **native addon**，在无编译工具链或受限网络的 Windows 机器上安装失败率高，与「零原生依赖」目标冲突。
 
 Node 22.5+ 内置 `node:sqlite`（`DatabaseSync`），零编译、零下载二进制。当前压测：1 万会话 bulk 索引 3.2s、搜索 <40ms，满足 M1 验收（<30s / <200ms）。
 

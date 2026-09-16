@@ -10,13 +10,12 @@ SessionHarbor 的设计、架构与产品文档集中在此目录；根目录仅
 | [ADR-001-node-sqlite.md](./ADR-001-node-sqlite.md) | 为何使用 Node 内置 `node:sqlite` 而非 better-sqlite3 |
 | [ADR-002-e2ee-sync.md](./ADR-002-e2ee-sync.md) | 端到端加密云同步设计 |
 | [team-library-schema.md](./team-library-schema.md) | 团队会话库数据模型 |
-| [enterprise-deploy.md](./enterprise-deploy.md) | 企业内网部署说明 |
 
 ## 阅读建议
 
 1. **新用户**：先读仓库根 [README](../README.md) 的快速开始
 2. **贡献者**：阅读 [CONTRIBUTING](../CONTRIBUTING.md) + 本文档中的开发文档架构章节
-3. **部署 / 安全**：阅读 [enterprise-deploy](./enterprise-deploy.md) 与 [SECURITY](../SECURITY.md)
+3. **安全**：阅读 [SECURITY](../SECURITY.md)
 4. **设计决策**：按 ADR 编号顺序阅读
 
 ## 资产

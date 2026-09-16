@@ -206,6 +206,8 @@ function help(): void {
   harbor register --email E --password P [--endpoint URL]   托管云注册并登录
   harbor login --email E --password P [--endpoint URL]      托管云登录
   harbor whoami                                               查看托管云账号/额度
+  harbor change-password --old P1 --new P2                   修改密码并吊销旧 token
+  harbor logout                                               登出并清除本地 token
   # 启动本地云端: node packages/cloud-server/dist/server.js
 
 全局选项:
@@ -823,6 +825,60 @@ async function cmdWhoami(args: Record<string, string | boolean | string[]>): Pro
   return 0;
 }
 
+async function cmdChangePassword(args: Record<string, string | boolean | string[]>): Promise<number> {
+  const wd = workdir(args);
+  const cfg = loadOrCreateSyncConfig(wd);
+  if (!cfg.hostedToken || !cfg.hostedEndpoint) {
+    console.error("请先 harbor login");
+    return 2;
+  }
+  const oldPassword = String(args.old ?? args["old-password"] ?? "");
+  const newPassword = String(args.new ?? args["new-password"] ?? "");
+  if (!oldPassword || !newPassword) {
+    console.error("用法: harbor change-password --old <旧密码> --new <新密码>");
+    return 2;
+  }
+  const res = await fetch(`${cfg.hostedEndpoint.replace(/\/+$/, "")}/v1/auth/change-password`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${cfg.hostedToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ oldPassword, newPassword }),
+  });
+  const body = (await res.json()) as { error?: string; token?: string };
+  if (!res.ok || !body.token) {
+    console.error(`改密失败: ${body.error || res.status}`);
+    return 1;
+  }
+  cfg.hostedToken = body.token;
+  saveSyncConfig(wd, cfg);
+  console.log("改密成功，旧 token 已吊销，新 token 已写入本地配置");
+  return 0;
+}
+
+async function cmdLogout(args: Record<string, string | boolean | string[]>): Promise<number> {
+  const wd = workdir(args);
+  const cfg = loadOrCreateSyncConfig(wd);
+  if (!cfg.hostedToken || !cfg.hostedEndpoint) {
+    console.log("未登录，无需登出");
+    return 0;
+  }
+  try {
+    await fetch(`${cfg.hostedEndpoint.replace(/\/+$/, "")}/v1/auth/logout`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${cfg.hostedToken}` },
+    });
+  } catch {
+    /* offline ok */
+  }
+  delete cfg.hostedToken;
+  cfg.license = undefined;
+  saveSyncConfig(wd, cfg);
+  console.log("已登出，本地 token 已清除");
+  return 0;
+}
+
 async function main(): Promise<void> {
   const { args, positional } = parseArgs(process.argv.slice(2));
   const cmd = positional[0] || String(args._ ?? "") || "help";
@@ -869,6 +925,12 @@ async function main(): Promise<void> {
         break;
       case "whoami":
         process.exit(await cmdWhoami(args));
+        break;
+      case "change-password":
+        process.exit(await cmdChangePassword(args));
+        break;
+      case "logout":
+        process.exit(await cmdLogout(args));
         break;
       case "pricing":
         console.log(formatPricing());

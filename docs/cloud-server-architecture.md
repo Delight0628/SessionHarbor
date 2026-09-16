@@ -81,12 +81,33 @@
 - `passphrase` 客户端本地，不上传  
 - 付费闸门：free 超 50 会话 → 402  
 
+## 生产 API 补充
+
+| 方法 | 路径 | 鉴权 | 说明 |
+|---|---|---|---|
+| GET | /v1/sync/list | Bearer | 当前用户远端对象列表 |
+| GET | /v1/admin/users | Admin | 用户列表+用量 |
+| POST | /v1/admin/plan | Admin | 设置套餐 free/pro/team |
+| POST | /v1/admin/disable | Admin | 封禁/解封并吊销 token |
+| GET | /metrics | 无 | 请求量/限流/库统计 |
+
+环境变量：`HARBOR_CLOUD_ADMIN_TOKEN`（管理端）、`HARBOR_CLOUD_TLS_CERT`/`_KEY`（可选内置 TLS）。
+
+限流：登录/注册/改密 10/min/IP；同步 300/min/IP；超限 429。
+
 ## 部署
 
 ```powershell
 $env:HARBOR_CLOUD_PORT=8787
 $env:HARBOR_CLOUD_DATA=D:\harbor-cloud\data
+$env:HARBOR_CLOUD_ADMIN_TOKEN=<强随机串>
 node packages\cloud-server\dist\server.js
+
+# Docker
+cd packages\cloud-server && docker compose up -d --build
+
+# 备份
+.\scripts\cloud-backup.ps1 -DataDir D:\harbor-cloud\data
 ```
 
-反代 HTTPS 后即可公网使用；生产建议再加：限流、邮件验证、备份 cron。
+公网请用 Nginx/Caddy 反代 HTTPS；邮件验证与高级审计可作后续迭代。

@@ -23,6 +23,7 @@ sandbox-m0/
 sandbox-e2e/
 sandbox-mimo/
 cloud-data/
+cloud-data2/
 cloud-cli-test/
 *.log
 

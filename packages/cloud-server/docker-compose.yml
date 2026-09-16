@@ -1,0 +1,21 @@
+services:
+  harbor-cloud:
+    build:
+      context: ../..
+      dockerfile: packages/cloud-server/Dockerfile
+    ports:
+      - "8787:8787"
+    environment:
+      HARBOR_CLOUD_PORT: "8787"
+      HARBOR_CLOUD_DATA: /data
+      # 生产必设：管理端与反代后的真实客户端 IP
+      HARBOR_CLOUD_ADMIN_TOKEN: ${HARBOR_CLOUD_ADMIN_TOKEN:-}
+      # HARBOR_CLOUD_TLS_CERT: /certs/fullchain.pem
+      # HARBOR_CLOUD_TLS_KEY: /certs/privkey.pem
+    volumes:
+      - harbor-data:/data
+      # - ./certs:/certs:ro
+    restart: unless-stopped
+
+volumes:
+  harbor-data:

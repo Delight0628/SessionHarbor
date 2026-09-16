@@ -211,6 +211,81 @@ export class CloudDatabase {
   setPlan(userId: string, plan: PlanId): void {
     this.db.prepare(`UPDATE users SET plan = ?, updated_at = ? WHERE id = ?`).run(plan, Date.now(), userId);
   }
+
+  setDisabled(userId: string, disabled: boolean): void {
+    this.db
+      .prepare(`UPDATE users SET disabled = ?, updated_at = ? WHERE id = ?`)
+      .run(disabled ? 1 : 0, Date.now(), userId);
+    if (disabled) {
+      this.db
+        .prepare(`UPDATE tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`)
+        .run(Date.now(), userId);
+    }
+  }
+
+  listUsers(): Array<{
+    id: string;
+    email: string;
+    plan: string;
+    disabled: number;
+    created_at: number;
+    sessions: number;
+    storageMb: number;
+  }> {
+    const rows = this.db
+      .prepare(`SELECT id, email, plan, disabled, created_at FROM users ORDER BY created_at DESC`)
+      .all() as Array<{
+      id: string;
+      email: string;
+      plan: string;
+      disabled: number;
+      created_at: number;
+    }>;
+    return rows.map((r) => {
+      const u = this.usage(r.id);
+      return { ...r, sessions: u.sessions, storageMb: u.storageMb };
+    });
+  }
+
+  /** 列出用户密文对象相对路径 */
+  listUserObjects(userId: string): Array<{ path: string; bytes: number; mtime: number }> {
+    const root = this.userDir(userId);
+    const out: Array<{ path: string; bytes: number; mtime: number }> = [];
+    const walk = (d: string, prefix: string) => {
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(d, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of entries) {
+        const abs = path.join(d, e.name);
+        const rel = prefix ? `${prefix}/${e.name}` : e.name;
+        if (e.isDirectory()) walk(abs, rel);
+        else {
+          const st = fs.statSync(abs);
+          out.push({ path: rel, bytes: st.size, mtime: Math.round(st.mtimeMs) });
+        }
+      }
+    };
+    walk(root, "");
+    return out;
+  }
+
+  stats() {
+    const users = (
+      this.db.prepare(`SELECT COUNT(*) AS n FROM users`).get() as { n: number }
+    ).n;
+    const activeTokens = (
+      this.db
+        .prepare(`SELECT COUNT(*) AS n FROM tokens WHERE revoked_at IS NULL`)
+        .get() as { n: number }
+    ).n;
+    const disabled = (
+      this.db.prepare(`SELECT COUNT(*) AS n FROM users WHERE disabled = 1`).get() as { n: number }
+    ).n;
+    return { users, disabled, activeTokens, dataRoot: this.dataRoot };
+  }
 }
 
 /** 相对路径安全：禁止 .. 与绝对路径 */

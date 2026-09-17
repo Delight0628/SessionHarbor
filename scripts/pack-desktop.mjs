@@ -19,18 +19,27 @@ const EXE_OUT = path.join(ROOT, "SessionHarbor.exe");
 
 function run(cmd, args, opts = {}) {
   console.log(`\n> ${cmd} ${args.join(" ")}`);
+  const hasLocalElectron = Boolean(findElectronDist());
+  const isCi = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
   const r = spawnSync(cmd, args, {
     cwd: opts.cwd ?? ROOT,
     stdio: "inherit",
     shell: process.platform === "win32",
     env: {
-    ...process.env,
-    ELECTRON_SKIP_BINARY_DOWNLOAD: "1",
-    npm_config_offline: "true",
-    npm_config_prefer_offline: "true",
-    ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: "true",
-    ...opts.env,
-  },
+      ...process.env,
+      // 仅在本地已有 electron dist 时跳过下载；CI 冷缓存必须允许下载
+      ELECTRON_SKIP_BINARY_DOWNLOAD: hasLocalElectron
+        ? process.env.ELECTRON_SKIP_BINARY_DOWNLOAD ?? "1"
+        : "0",
+      ...(isCi
+        ? {}
+        : {
+            npm_config_offline: "true",
+            npm_config_prefer_offline: "true",
+          }),
+      ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: "true",
+      ...opts.env,
+    },
   });
   if (r.status !== 0) {
     throw new Error(`${cmd} failed with code ${r.status}`);
@@ -52,8 +61,17 @@ async function main() {
   console.log("== SessionHarbor pack ==");
   console.log("ROOT:", ROOT);
 
-  // 1) 构建全部 workspace 包
-  run("pnpm", ["-r", "build"]);
+  // 1) 构建 workspace 包（与 CI 相同过滤，避免个别包 tsc 严格失败拖垮打包）
+  const filters = [
+    "@sessionharbor/core",
+    "@sessionharbor/adapter-*",
+    "@sessionharbor/cli",
+    "@sessionharbor/cloud-server",
+    "@sessionharbor/desktop",
+  ];
+  for (const f of filters) {
+    run("pnpm", ["--filter", f, "build"]);
+  }
 
   // 2) esbuild 打包主进程（内联全部 @sessionharbor/*，排除 electron）
   const mainBundle = path.join(DESKTOP, "dist", "main.cjs");
@@ -77,9 +95,11 @@ async function main() {
   // 3) 写临时 package.json（main 指向 cjs bundle）
   const desktopPkgPath = path.join(DESKTOP, "package.json");
   const desktopPkg = JSON.parse(fs.readFileSync(desktopPkgPath, "utf-8"));
+  const rootPkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8"));
+  const version = rootPkg.version || desktopPkg.version || "0.1.0";
   const packPkg = {
     name: "sessionharbor-desktop",
-    version: desktopPkg.version || "0.1.0",
+    version,
     private: true,
     description: "SessionHarbor — 跨 AI 客户端会话统一管理",
     main: "dist/main.cjs",

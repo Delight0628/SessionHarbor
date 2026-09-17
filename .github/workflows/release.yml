@@ -33,9 +33,18 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Ensure Electron binary
+        shell: bash
+        run: |
+          # 冷缓存 runner 需要下载 electron dist，否则 electron-builder 无 electronDist
+          if [ ! -d node_modules/.pnpm/electron@*/node_modules/electron/dist ]; then
+            echo "Downloading electron binary..."
+            node node_modules/electron/install.js || true
+          fi
+          ls node_modules/.pnpm/electron@*/node_modules/electron/dist/electron.exe 2>/dev/null || \
+            find node_modules -path '*electron/dist/electron.exe' | head -3
+
       - name: Pack portable exe
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: "0"
         run: node scripts/pack-desktop.mjs
 
       - name: Resolve tag

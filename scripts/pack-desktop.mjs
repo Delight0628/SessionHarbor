@@ -49,12 +49,22 @@ function run(cmd, args, opts = {}) {
 function findElectronDist() {
   const pnpmDir = path.join(ROOT, "node_modules", ".pnpm");
   if (!fs.existsSync(pnpmDir)) return undefined;
+  const exeName = process.platform === "win32" ? "electron.exe" : "electron";
   const hits = fs
     .readdirSync(pnpmDir)
     .filter((n) => n.startsWith("electron@"))
-    .map((n) => path.join(pnpmDir, n, "node_modules", "electron", "dist", "electron.exe"))
+    .map((n) => path.join(pnpmDir, n, "node_modules", "electron", "dist", exeName))
     .filter((p) => fs.existsSync(p));
-  return hits[0];
+  if (hits[0]) return hits[0];
+  // 回退：apps/desktop 下的 electron
+  const alt = path.join(
+    DESKTOP,
+    "node_modules",
+    "electron",
+    "dist",
+    exeName,
+  );
+  return fs.existsSync(alt) ? alt : undefined;
 }
 
 async function main() {
@@ -158,16 +168,21 @@ async function main() {
     const cfgPath = path.join(DESKTOP, "electron-builder.json");
     fs.writeFileSync(cfgPath, JSON.stringify(ebConfig, null, 2));
 
-    run("pnpm", [
-      "exec",
-      "electron-builder",
-      "--win",
-      "portable",
-      "--config",
-      "electron-builder.json",
-      "--publish",
-      "never",
-    ], { cwd: DESKTOP });
+    // electron-builder 装在仓库根 devDependencies；不要在 apps/desktop 下 pnpm exec
+    const ebCliCandidates = [
+      path.join(ROOT, "node_modules", "electron-builder", "out", "cli", "cli.js"),
+      path.join(ROOT, "node_modules", "electron-builder", "cli.js"),
+    ];
+    const ebCli = ebCliCandidates.find((p) => fs.existsSync(p));
+    if (!ebCli) {
+      throw new Error(
+        "未找到 electron-builder CLI，请先在仓库根目录执行 pnpm install（devDependency electron-builder）",
+      );
+    }
+    console.log("electron-builder CLI:", ebCli);
+    run("node", [ebCli, "--win", "portable", "--config", cfgPath, "--publish", "never"], {
+      cwd: DESKTOP,
+    });
 
     // 5) 拷贝到仓库根目录
     const candidates = [];

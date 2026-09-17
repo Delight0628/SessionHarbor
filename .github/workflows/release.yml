@@ -31,18 +31,23 @@ jobs:
           cache: pnpm
 
       - name: Install
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "0"
         run: pnpm install --frozen-lockfile
 
       - name: Ensure Electron binary
         shell: bash
         run: |
-          # 冷缓存 runner 需要下载 electron dist，否则 electron-builder 无 electronDist
-          if [ ! -d node_modules/.pnpm/electron@*/node_modules/electron/dist ]; then
-            echo "Downloading electron binary..."
-            node node_modules/electron/install.js || true
+          set -e
+          DIST=$(find node_modules -path '*/electron/dist' -type d 2>/dev/null | head -1 || true)
+          if [ -z "$DIST" ]; then
+            ELEC=$(find node_modules -path '*/electron/install.js' 2>/dev/null | head -1 || true)
+            echo "electron dist missing, running: $ELEC"
+            if [ -n "$ELEC" ]; then node "$ELEC"; fi
+            DIST=$(find node_modules -path '*/electron/dist' -type d 2>/dev/null | head -1 || true)
           fi
-          ls node_modules/.pnpm/electron@*/node_modules/electron/dist/electron.exe 2>/dev/null || \
-            find node_modules -path '*electron/dist/electron.exe' | head -3
+          echo "electron dist: $DIST"
+          ls -la "$DIST" 2>/dev/null || true
 
       - name: Pack portable exe
         run: node scripts/pack-desktop.mjs

@@ -1,6 +1,6 @@
 {
   "name": "sessionharbor",
-  "version": "0.2.5",
+  "version": "0.2.7",
   "private": true,
   "description": "SessionHarbor — 跨 AI 客户端会话统一管理、检索与互迁",
   "license": "MIT",

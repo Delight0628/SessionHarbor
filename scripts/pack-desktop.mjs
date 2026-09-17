@@ -1,9 +1,12 @@
 /**
- * 一键打包 SessionHarbor 桌面端为 Windows 可执行文件
- * 产物: <repo>/SessionHarbor.exe（便携版单文件）
+ * 打包 SessionHarbor 桌面端（按当前平台）
+ * Windows → portable exe
+ * macOS   → dmg + zip
+ * Linux   → AppImage + tar.gz
  *
  * 用法: node scripts/pack-desktop.mjs
- * 环境: 已 pnpm install；会先 tsc 构建各包，再 esbuild 打包主进程，再 electron-builder
+ * 环境: 仓库根已 pnpm install
+ * 产物: release/artifacts/ 下的安装包
  */
 
 import { spawnSync } from "node:child_process";
@@ -13,9 +16,9 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DESKTOP = path.join(ROOT, "apps", "desktop");
-// 每次使用独立输出目录，避免 Windows 上 asar/资源被占用导致 EBUSY
 const RELEASE = path.join(ROOT, "release", `pack-${Date.now()}`);
-const EXE_OUT = path.join(ROOT, "SessionHarbor.exe");
+const ARTIFACTS = path.join(ROOT, "release", "artifacts");
+const platform = process.platform; // win32 | darwin | linux
 
 function run(cmd, args, opts = {}) {
   console.log(`\n> ${cmd} ${args.join(" ")}`);
@@ -27,7 +30,6 @@ function run(cmd, args, opts = {}) {
     shell: process.platform === "win32",
     env: {
       ...process.env,
-      // 仅在本地已有 electron dist 时跳过下载；CI 冷缓存必须允许下载
       ELECTRON_SKIP_BINARY_DOWNLOAD: hasLocalElectron
         ? process.env.ELECTRON_SKIP_BINARY_DOWNLOAD ?? "1"
         : "0",
@@ -38,6 +40,9 @@ function run(cmd, args, opts = {}) {
             npm_config_prefer_offline: "true",
           }),
       ELECTRON_BUILDER_ALLOW_UNRESOLVED_DEPENDENCIES: "true",
+      // 未签名时避免 macOS/Windows 卡在证书探测
+      CSC_IDENTITY_AUTO_DISCOVERY: process.env.CSC_IDENTITY_AUTO_DISCOVERY ?? "false",
+      CSC_LINK: process.env.CSC_LINK ?? "",
       ...opts.env,
     },
   });
@@ -56,22 +61,83 @@ function findElectronDist() {
     .map((n) => path.join(pnpmDir, n, "node_modules", "electron", "dist", exeName))
     .filter((p) => fs.existsSync(p));
   if (hits[0]) return hits[0];
-  // 回退：apps/desktop 下的 electron
-  const alt = path.join(
-    DESKTOP,
-    "node_modules",
-    "electron",
-    "dist",
-    exeName,
-  );
+  const alt = path.join(DESKTOP, "node_modules", "electron", "dist", exeName);
   return fs.existsSync(alt) ? alt : undefined;
+}
+
+function platformTargets() {
+  if (platform === "win32") {
+    return {
+      ebArgs: ["--win", "portable"],
+      config: {
+        win: {
+          target: [{ target: "portable", arch: ["x64"] }],
+          artifactName: "SessionHarbor-${version}-win-x64.exe",
+        },
+        portable: {
+          artifactName: "SessionHarbor-${version}-win-x64.exe",
+        },
+      },
+      label: "win-x64",
+    };
+  }
+  if (platform === "darwin") {
+    return {
+      ebArgs: ["--mac", "dmg", "zip"],
+      config: {
+        mac: {
+          target: [
+            { target: "dmg", arch: ["x64", "arm64"] },
+            { target: "zip", arch: ["x64", "arm64"] },
+          ],
+          category: "public.app-category.productivity",
+          artifactName: "SessionHarbor-${version}-mac-${arch}.${ext}",
+          identity: null,
+        },
+        dmg: {
+          artifactName: "SessionHarbor-${version}-mac-${arch}.${ext}",
+        },
+      },
+      label: "mac",
+    };
+  }
+  // linux
+  return {
+    ebArgs: ["--linux", "AppImage", "tar.gz"],
+    config: {
+      linux: {
+        target: [
+          { target: "AppImage", arch: ["x64"] },
+          { target: "tar.gz", arch: ["x64"] },
+        ],
+        category: "Utility",
+        artifactName: "SessionHarbor-${version}-linux-${arch}.${ext}",
+      },
+    },
+    label: "linux-x64",
+  };
+}
+
+function findArtifacts(dir, depth = 0) {
+  if (depth > 4 || !fs.existsSync(dir)) return [];
+  const out = [];
+  for (const n of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, n.name);
+    if (n.isDirectory()) {
+      if (/unpacked|__macosx|\.app/i.test(n.name)) continue;
+      out.push(...findArtifacts(p, depth + 1));
+    } else if (/\.(exe|dmg|zip|AppImage|tar\.gz)$/i.test(n.name)) {
+      if (/blockmap|\.yml$/i.test(n.name)) continue;
+      out.push(p);
+    }
+  }
+  return out;
 }
 
 async function main() {
   console.log("== SessionHarbor pack ==");
-  console.log("ROOT:", ROOT);
+  console.log("ROOT:", ROOT, "platform:", platform);
 
-  // 1) 构建 workspace 包（与 CI 相同过滤，避免个别包 tsc 严格失败拖垮打包）
   const filters = [
     "@sessionharbor/core",
     "@sessionharbor/adapter-*",
@@ -83,7 +149,6 @@ async function main() {
     run("pnpm", ["--filter", f, "build"]);
   }
 
-  // 2) esbuild 打包主进程（内联全部 @sessionharbor/*，排除 electron）
   const mainBundle = path.join(DESKTOP, "dist", "main.cjs");
   run("pnpm", [
     "exec",
@@ -97,12 +162,9 @@ async function main() {
     "--outfile=" + mainBundle,
   ]);
 
-  // preload + renderer 已在源目录
   const preloadSrc = path.join(DESKTOP, "src", "preload.cjs");
-  const preloadDst = path.join(DESKTOP, "dist", "preload.cjs");
-  fs.copyFileSync(preloadSrc, preloadDst);
+  fs.copyFileSync(preloadSrc, path.join(DESKTOP, "dist", "preload.cjs"));
 
-  // 3) 写临时 package.json（main 指向 cjs bundle）
   const desktopPkgPath = path.join(DESKTOP, "package.json");
   const desktopPkg = JSON.parse(fs.readFileSync(desktopPkgPath, "utf-8"));
   const rootPkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8"));
@@ -116,22 +178,17 @@ async function main() {
     author: "SessionHarbor",
     license: "MIT",
   };
-  const packPkgPath = path.join(DESKTOP, "package.pack.json");
-  // electron-builder 读目录下 package.json；临时覆盖
   const backupPkg = path.join(DESKTOP, "package.json.devbackup");
   fs.copyFileSync(desktopPkgPath, backupPkg);
   fs.writeFileSync(desktopPkgPath, JSON.stringify(packPkg, null, 2));
 
   try {
-    // 4) electron-builder 便携版
     fs.mkdirSync(RELEASE, { recursive: true });
+    fs.mkdirSync(ARTIFACTS, { recursive: true });
+
     const electronVer =
-      JSON.parse(
-        fs.readFileSync(
-          path.join(ROOT, "apps", "desktop", "package.json.devbackup"),
-          "utf-8",
-        ),
-      ).devDependencies?.electron?.replace(/^[\^~]/, "") || "37.10.3";
+      desktopPkg.devDependencies?.electron?.replace(/^[\^~]/, "") || "37.10.3";
+    const { ebArgs, config: platConfig } = platformTargets();
 
     const ebConfig = {
       appId: "com.sessionharbor.desktop",
@@ -144,119 +201,74 @@ async function main() {
       files: ["dist/main.cjs", "dist/preload.cjs", "renderer/**/*", "package.json"],
       asar: true,
       electronVersion: electronVer,
-      // 使用本地已下载的 electron dist，避免重复下载
       electronDist: (() => {
         const exe = findElectronDist();
         return exe ? path.dirname(exe) : undefined;
       })(),
-      win: {
-        target: [
-          {
-            target: "portable",
-            arch: ["x64"],
-          },
-        ],
-        artifactName: "SessionHarbor-${version}.exe",
-      },
-      portable: {
-        artifactName: "SessionHarbor-${version}.exe",
-      },
       npmRebuild: false,
       nodeGypRebuild: false,
       buildDependenciesFromSource: false,
+      ...platConfig,
     };
+
     const cfgPath = path.join(DESKTOP, "electron-builder.json");
     fs.writeFileSync(cfgPath, JSON.stringify(ebConfig, null, 2));
 
-    // electron-builder 装在仓库根 devDependencies；不要在 apps/desktop 下 pnpm exec
-    const ebCliCandidates = [
+    const ebCli = [
       path.join(ROOT, "node_modules", "electron-builder", "out", "cli", "cli.js"),
       path.join(ROOT, "node_modules", "electron-builder", "cli.js"),
-    ];
-    const ebCli = ebCliCandidates.find((p) => fs.existsSync(p));
-    if (!ebCli) {
-      throw new Error(
-        "未找到 electron-builder CLI，请先在仓库根目录执行 pnpm install（devDependency electron-builder）",
-      );
-    }
+    ].find((p) => fs.existsSync(p));
+    if (!ebCli) throw new Error("未找到 electron-builder CLI，请先 pnpm install");
     console.log("electron-builder CLI:", ebCli);
-    run("node", [ebCli, "--win", "portable", "--config", cfgPath, "--publish", "never"], {
+
+    run("node", [ebCli, ...ebArgs, "--config", cfgPath, "--publish", "never"], {
       cwd: DESKTOP,
     });
 
-    // 5) 拷贝到仓库根目录
-    const candidates = [];
-    const walk = (dir, depth = 0) => {
-      if (depth > 3 || !fs.existsSync(dir)) return;
-      for (const n of fs.readdirSync(dir)) {
-        const p = path.join(dir, n);
-        if (n.toLowerCase().endsWith(".exe") && fs.statSync(p).isFile()) {
-          candidates.push(p);
-        } else if (fs.statSync(p).isDirectory() && !n.startsWith("win-unpacked")) {
-          // portable 输出可能在 release 根
+    const found = findArtifacts(RELEASE);
+    if (!found.length) throw new Error("未找到打包产物");
+    console.log("artifacts found:");
+    for (const f of found) console.log(" -", f);
+
+    // Windows 保留根目录 SessionHarbor.exe 兼容旧路径
+    if (platform === "win32") {
+      const preferred =
+        found.find((p) => p.endsWith(".exe") && !p.includes("unpacked")) || found[0];
+      try {
+        spawnSync("taskkill", ["/IM", "SessionHarbor.exe", "/F"], {
+          stdio: "ignore",
+          shell: true,
+        });
+      } catch {
+        /* ignore */
+      }
+      const rootExe = path.join(ROOT, "SessionHarbor.exe");
+      for (let i = 0; i < 6; i++) {
+        try {
+          fs.copyFileSync(preferred, rootExe);
+          break;
+        } catch {
+          await new Promise((r) => setTimeout(r, 500));
         }
       }
-    };
-    walk(RELEASE);
-    // 也扫 release 根下直接的 exe
-    for (const n of fs.readdirSync(RELEASE)) {
-      if (n.toLowerCase().endsWith(".exe")) {
-        candidates.push(path.join(RELEASE, n));
-      }
-    }
-    // win-unpacked 里的主程序也可作为回退
-    const unpacked = path.join(RELEASE, "win-unpacked", "SessionHarbor.exe");
-    if (fs.existsSync(unpacked)) candidates.push(unpacked);
-
-    const unique = [...new Set(candidates)];
-    // 优先 portable 单文件（体积更大但可双击）
-    const portable =
-      unique.find((p) => /portable|SessionHarbor-0\./i.test(path.basename(p))) ||
-      unique.find((p) => !p.includes("win-unpacked")) ||
-      unique[0];
-    if (!portable) throw new Error("未找到打包产物 .exe");
-
-    // 结束正在运行的 SessionHarbor，避免根目录 exe 被占用
-    try {
-      spawnSync("taskkill", ["/IM", "SessionHarbor.exe", "/F"], {
-        stdio: "ignore",
-        shell: true,
-      });
-    } catch {
-      /* ignore */
+      console.log("SessionHarbor.exe:", rootExe, (fs.statSync(rootExe).size / 1024 / 1024).toFixed(1), "MB");
     }
 
-    const tmpOut = EXE_OUT + ".new";
-    let copied = false;
-    for (let i = 0; i < 8 && !copied; i++) {
-      try {
-        fs.copyFileSync(portable, tmpOut);
-        fs.renameSync(tmpOut, EXE_OUT);
-        copied = true;
-      } catch (e) {
-        if (i === 7) throw e;
-        console.log(`copy SessionHarbor.exe 失败，重试 ${i + 1}/7…`);
-        await new Promise((r) => setTimeout(r, 800));
-      }
+    for (const f of found) {
+      const dest = path.join(ARTIFACTS, path.basename(f));
+      fs.copyFileSync(f, dest);
+      console.log("→", dest);
     }
-    const sizeMb = (fs.statSync(EXE_OUT).size / 1024 / 1024).toFixed(1);
-    console.log(`\n== 完成 ==`);
-    console.log(`产物: ${EXE_OUT} (${sizeMb} MB)`);
-    console.log(`来源: ${portable}`);
-    // 尽力清理本次输出目录（失败则留给下次/手动清理）
-    try {
-      fs.rmSync(RELEASE, { recursive: true, force: true });
-    } catch {
-      /* ignore */
-    }
+
+    console.log(`\n== 完成 (${platform}) ==`);
+    console.log("产物目录:", ARTIFACTS);
   } finally {
-    // 恢复 workspace package.json
     if (fs.existsSync(backupPkg)) {
       fs.copyFileSync(backupPkg, desktopPkgPath);
       fs.unlinkSync(backupPkg);
     }
     try {
-      fs.unlinkSync(packPkgPath);
+      fs.rmSync(RELEASE, { recursive: true, force: true });
     } catch {
       /* ignore */
     }

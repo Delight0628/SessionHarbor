@@ -23,15 +23,89 @@ function setup() {
   const alinkRoot = path.join(SANDBOX, "alink");
   const alinkMsg = path.join(alinkRoot, "user", "messages");
   fs.mkdirSync(alinkMsg, { recursive: true });
-  const srcDb = path.join(process.env.APPDATA, "alink", "messages_tc032353_PROD.sqlite");
+  const srcDb = process.env.APPDATA
+    ? path.join(process.env.APPDATA, "alink", "messages_tc032353_PROD.sqlite")
+    : null;
   const alinkDb = path.join(alinkRoot, "messages_tc032353_PROD.sqlite");
-  fs.copyFileSync(srcDb, alinkDb);
-  for (const ext of ["-wal", "-shm"]) {
-    if (fs.existsSync(srcDb + ext)) fs.copyFileSync(srcDb + ext, alinkDb + ext);
+  if (srcDb && fs.existsSync(srcDb)) {
+    fs.copyFileSync(srcDb, alinkDb);
+    for (const ext of ["-wal", "-shm"]) {
+      if (fs.existsSync(srcDb + ext)) fs.copyFileSync(srcDb + ext, alinkDb + ext);
+    }
+  } else {
+    // CI / 无本机数据：最小 schema，保证读写链路可测
+    const db = new DatabaseSync(alinkDb);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS alink_session (
+        id INTEGER PRIMARY KEY,
+        sessionId TEXT NOT NULL,
+        name TEXT NOT NULL,
+        messages TEXT DEFAULT '[]',
+        userId TEXT NOT NULL,
+        createdAt TEXT,
+        updatedAt TEXT,
+        cwd TEXT,
+        artifacts TEXT DEFAULT '[]',
+        isFavorite INTEGER DEFAULT 0,
+        sessionType TEXT DEFAULT 'normal',
+        lastModelAlias TEXT,
+        selectedModelId TEXT,
+        archivedAt TEXT,
+        agentEngine TEXT NOT NULL DEFAULT 'claude'
+      );
+      CREATE TABLE IF NOT EXISTS sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        createdAt TEXT,
+        updatedAt TEXT,
+        provider TEXT,
+        model TEXT,
+        temperature REAL,
+        top_p REAL,
+        userId TEXT,
+        max_tokens INTEGER,
+        repetition_penalty REAL,
+        seed INTEGER,
+        system_prompt TEXT,
+        top_k INTEGER,
+        agentType TEXT,
+        agentUrl TEXT,
+        agentId TEXT,
+        isFavorite INTEGER DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message TEXT,
+        createdAt TEXT,
+        avatar TEXT,
+        name TEXT,
+        role TEXT,
+        provider TEXT,
+        model TEXT,
+        sessionId TEXT,
+        userName TEXT,
+        isDeleted INTEGER DEFAULT 0
+      );
+      INSERT INTO alink_session
+        (sessionId, name, messages, userId, createdAt, updatedAt, cwd, agentEngine)
+      VALUES
+        ('00609438-b872-4963-9873-21bd09140c04', '开发MiMo与领慧AI对话记录迁移工具',
+         '[]', 'ci-user', '2026-09-10 10:51:59', '2026-09-10 11:16:02', 'D:\\mimo', 'claude');
+    `);
+    db.close();
   }
   const sampleId = "00609438-b872-4963-9873-21bd09140c04";
-  const srcJsonl = path.join(process.env.APPDATA, "alink", "user", "messages", `${sampleId}.jsonl`);
-  if (fs.existsSync(srcJsonl)) fs.copyFileSync(srcJsonl, path.join(alinkMsg, `${sampleId}.jsonl`));
+  const srcJsonl = process.env.APPDATA
+    ? path.join(process.env.APPDATA, "alink", "user", "messages", `${sampleId}.jsonl`)
+    : null;
+  const fixtureAlink = path.join(ROOT, "fixtures", "alink", `${sampleId}.jsonl`);
+  if (srcJsonl && fs.existsSync(srcJsonl)) {
+    fs.copyFileSync(srcJsonl, path.join(alinkMsg, `${sampleId}.jsonl`));
+  } else if (fs.existsSync(fixtureAlink)) {
+    fs.copyFileSync(fixtureAlink, path.join(alinkMsg, `${sampleId}.jsonl`));
+  } else {
+    throw new Error("缺少 alink 样本：无本机数据且 fixtures 中无 " + sampleId);
+  }
 
   // claude-code sandbox
   const ccRoot = path.join(SANDBOX, "claude-projects");
@@ -39,16 +113,18 @@ function setup() {
   const fixtureCC = path.join(ROOT, "fixtures", "claude-code", "026b2f92-a89e-43d1-88cf-fd94b0072edd.jsonl");
   if (fs.existsSync(fixtureCC)) {
     fs.copyFileSync(fixtureCC, path.join(ccRoot, "D--SessionHarborSandbox", path.basename(fixtureCC)));
+  } else {
+    throw new Error("缺少 claude-code fixture");
   }
 
-  // codex sandbox：拷贝真实 state_5.sqlite + 一个小 rollout
+  // codex sandbox：拷贝真实 state_5.sqlite + 一个小 rollout；无本机则最小库 + fixture rollout
   const codexRoot = path.join(SANDBOX, "codex");
   const codexSessions = path.join(codexRoot, "sessions", "2026", "07", "30");
   fs.mkdirSync(codexSessions, { recursive: true });
-  const realCodex = path.join(process.env.USERPROFILE, ".codex");
-  const realState = path.join(realCodex, "state_5.sqlite");
+  const realCodex = process.env.USERPROFILE ? path.join(process.env.USERPROFILE, ".codex") : null;
+  const realState = realCodex ? path.join(realCodex, "state_5.sqlite") : null;
   const codexDb = path.join(codexRoot, "state_5.sqlite");
-  if (fs.existsSync(realState)) {
+  if (realState && fs.existsSync(realState)) {
     fs.copyFileSync(realState, codexDb);
     for (const ext of ["-wal", "-shm"]) {
       if (fs.existsSync(realState + ext)) fs.copyFileSync(realState + ext, codexDb + ext);
@@ -64,8 +140,9 @@ function setup() {
     );`);
     db.close();
   }
-  const realRollouts = path.join(realCodex, "sessions", "2026", "07", "30");
-  if (fs.existsSync(realRollouts)) {
+  const realRollouts = realCodex ? path.join(realCodex, "sessions", "2026", "07", "30") : null;
+  let copiedRollout = false;
+  if (realRollouts && fs.existsSync(realRollouts)) {
     const small = fs
       .readdirSync(realRollouts)
       .filter((f) => f.endsWith(".jsonl"))
@@ -74,7 +151,72 @@ function setup() {
       .sort((a, b) => a.s - b.s)[0];
     if (small) {
       fs.copyFileSync(path.join(realRollouts, small.f), path.join(codexSessions, small.f));
+      copiedRollout = true;
     }
+  }
+  if (!copiedRollout) {
+    // 从 chatgpt fixture 合成最小 codex rollout，保证 readSession 有内容
+    const chatgptFix = path.join(ROOT, "fixtures", "chatgpt-export", "conversations.json");
+    const conv = JSON.parse(fs.readFileSync(chatgptFix, "utf-8"))[0];
+    const lines = [
+      JSON.stringify({
+        timestamp: new Date(conv.create_time * 1000).toISOString(),
+        type: "session_meta",
+        payload: {
+          id: conv.conversation_id,
+          timestamp: new Date(conv.create_time * 1000).toISOString(),
+          cwd: "D:\\ci-sandbox",
+          originator: "ci",
+          cli_version: "ci",
+        },
+      }),
+    ];
+    const msgs = [
+      ["user", "帮我设计一个跨客户端会话迁移工具的核心架构"],
+      ["assistant", "建议分层：应用层、引擎层、适配器层、中间格式 IR。"],
+    ];
+    for (const [role, text] of msgs) {
+      lines.push(
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          type: "response_item",
+          payload: {
+            type: "message",
+            id: `msg_${role}`,
+            role,
+            content: [{ type: role === "user" ? "input_text" : "output_text", text }],
+          },
+        }),
+      );
+    }
+    const name = `rollout-2026-07-30T00-00-00-${conv.conversation_id}.jsonl`;
+    fs.writeFileSync(path.join(codexSessions, name), lines.join("\n") + "\n", "utf-8");
+    const db = new DatabaseSync(codexDb);
+    db.exec(`CREATE TABLE IF NOT EXISTS threads (
+      id TEXT PRIMARY KEY, rollout_path TEXT, created_at INTEGER, updated_at INTEGER,
+      source TEXT, model_provider TEXT, cwd TEXT, title TEXT, archived INTEGER DEFAULT 0,
+      cli_version TEXT, first_user_message TEXT, model TEXT,
+      created_at_ms INTEGER, updated_at_ms INTEGER, thread_source TEXT, preview TEXT
+    );`);
+    const ms = conv.create_time * 1000;
+    db.prepare(
+      `INSERT OR REPLACE INTO threads
+       (id, rollout_path, created_at, updated_at, source, model_provider, cwd, title,
+        archived, cli_version, first_user_message, model, created_at_ms, updated_at_ms, thread_source, preview)
+       VALUES (?, ?, ?, ?, 'ci', 'migrated', ?, ?, 0, 'ci', ?, 'ci', ?, ?, 'user', ?)`,
+    ).run(
+      conv.conversation_id,
+      path.join(codexSessions, name),
+      Math.floor(ms / 1000),
+      Math.floor(ms / 1000),
+      "D:\\ci-sandbox",
+      conv.title,
+      conv.title,
+      ms,
+      ms,
+      conv.title,
+    );
+    db.close();
   }
 
   // chatgpt fixture

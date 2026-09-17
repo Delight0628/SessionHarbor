@@ -16,12 +16,23 @@
 ## 2. 启动服务端
 
 ```powershell
-$env:DATABASE_URL = "postgresql://user:pass@host:5432/db?sslmode=require"
+# Session pooler（东京区示例；ref/密码换成你的）
+$env:DATABASE_URL = "postgresql://postgres.<project-ref>:<密码>@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres"
+# 若公司网络 SSL 中间人导致 self signed certificate：
+$env:HARBOR_CLOUD_PG_SSL_INSECURE = "1"
 $env:HARBOR_CLOUD_ADMIN_TOKEN = "<强随机>"
 $env:HARBOR_CLOUD_MAIL = "console"
 $env:HARBOR_CLOUD_REQUIRE_EMAIL_VERIFY = "1"
 $env:PORT = "8080"
 node packages\cloud-server\dist\server.js
+```
+
+本机实测（Delight0628 / ap-northeast-1）：
+
+```text
+OK postgresql://postgres.hnrvuzgljxwixspbwgaw:***@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres
+healthz → {"backend":"postgres"}
+register + sync PUT/GET 200
 ```
 
 日志应显示：`后端: postgres (DATABASE_URL)`  

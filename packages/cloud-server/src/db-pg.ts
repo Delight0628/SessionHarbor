@@ -63,10 +63,16 @@ export class PostgresCloudDatabase {
   private pool: PgPool;
 
   constructor(readonly databaseUrl: string) {
+    // 部分企业网关会插入自签证书，导致 verify-full 失败；
+    // 可用 HARBOR_CLOUD_PG_SSL_INSECURE=1 放宽（仅建议内网/自建）。
+    const insecure =
+      String(process.env.HARBOR_CLOUD_PG_SSL_INSECURE || "").toLowerCase() === "1" ||
+      String(process.env.HARBOR_CLOUD_PG_SSL_INSECURE || "").toLowerCase() === "true";
     this.pool = new Pool({
       connectionString: databaseUrl,
       max: 10,
       idleTimeoutMillis: 30_000,
+      ...(insecure ? { ssl: { rejectUnauthorized: false } } : {}),
     });
   }
 

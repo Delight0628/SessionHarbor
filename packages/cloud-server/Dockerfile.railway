@@ -1,0 +1,24 @@
+# Railway 专用：只打包 cloud-server（上下文为仓库根）
+FROM node:22-bookworm-slim AS build
+WORKDIR /repo
+# 仅复制构建所需
+COPY package.json pnpm-lock.yaml ./
+COPY packages/core/package.json packages/core/
+COPY packages/cloud-server/package.json packages/cloud-server/
+# 若无 pnpm 则用 npm 简化：直接拷 dist（CI 里先本地 build 好再 deploy 更稳）
+COPY packages/core/dist packages/core/dist
+COPY packages/cloud-server/dist packages/cloud-server/dist
+
+FROM node:22-bookworm-slim
+WORKDIR /app
+ENV NODE_ENV=production \
+    PORT=8080 \
+    HARBOR_CLOUD_PORT=8080 \
+    HARBOR_CLOUD_DATA=/data
+COPY --from=build /repo/packages/cloud-server /app/packages/cloud-server
+COPY --from=build /repo/packages/core /app/packages/core
+# 简化依赖：cloud-server 只依赖 core 的 PLANS，已拷 dist；无需 npm i
+WORKDIR /app/packages/cloud-server
+VOLUME ["/data"]
+EXPOSE 8080
+CMD ["node", "dist/server.js"]

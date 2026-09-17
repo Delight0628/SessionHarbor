@@ -14,7 +14,9 @@ import path from "node:path";
 import { ApiError, CloudDatabase, atomicWrite, quotaOf, safeRel } from "./db.js";
 import { loadMailConfig, sendVerifyCode } from "./mailer.js";
 
-const PORT = Number(process.env.HARBOR_CLOUD_PORT || 8787);
+const PORT = Number(
+  process.env.PORT || process.env.HARBOR_CLOUD_PORT || 8787,
+);
 const DATA = path.resolve(
   process.env.HARBOR_CLOUD_DATA || path.join(process.cwd(), "cloud-data"),
 );

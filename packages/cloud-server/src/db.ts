@@ -9,6 +9,8 @@ import { randomBytes, scryptSync, timingSafeEqual, createHash } from "node:crypt
 import { DatabaseSync } from "node:sqlite";
 import { PLANS, type PlanId } from "@sessionharbor/core";
 
+export type { PlanId };
+
 export interface UserRow {
   id: string;
   email: string;

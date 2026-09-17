@@ -11,8 +11,9 @@ import http from "node:http";
 import https from "node:https";
 import fs from "node:fs";
 import path from "node:path";
-import { ApiError, CloudDatabase, atomicWrite, quotaOf, safeRel } from "./db.js";
+import { ApiError, quotaOf, safeRel } from "./db.js";
 import { loadMailConfig, sendVerifyCode } from "./mailer.js";
+import { createBackend, type CloudBackend } from "./backend.js";
 
 const PORT = Number(
   process.env.PORT || process.env.HARBOR_CLOUD_PORT || 8787,
@@ -110,8 +111,8 @@ function requireAdmin(req: http.IncomingMessage) {
   if (!t || t !== ADMIN_TOKEN) throw new ApiError("管理员鉴权失败", 401);
 }
 
-export function createCloudServer(dataRoot: string) {
-  const db = new CloudDatabase(dataRoot);
+export async function createCloudServer(dataRoot: string) {
+  const db: CloudBackend = await createBackend(dataRoot);
   const mail = loadMailConfig(dataRoot);
 
   const handler = async (req: http.IncomingMessage, res: http.ServerResponse) => {
@@ -126,18 +127,27 @@ export function createCloudServer(dataRoot: string) {
         return;
       }
       if (p === "/healthz") {
-        json(res, 200, { ok: true, service: "sessionharbor-cloud", ts: Date.now() });
+        json(res, 200, {
+          ok: true,
+          service: "sessionharbor-cloud",
+          ts: Date.now(),
+          backend: db.kind,
+        });
         return;
       }
       if (p === "/metrics" && method === "GET") {
-        json(res, 200, { ...metrics, uptimeMs: Date.now() - metrics.startedAt, db: db.stats() });
+        json(res, 200, {
+          ...metrics,
+          uptimeMs: Date.now() - metrics.startedAt,
+          db: await db.stats(),
+        });
         return;
       }
 
       // ---------- admin ----------
       if (p === "/v1/admin/users" && method === "GET") {
         requireAdmin(req);
-        json(res, 200, { users: db.listUsers() });
+        json(res, 200, { users: await db.listUsers() });
         return;
       }
       if (p === "/v1/admin/plan" && method === "POST") {
@@ -146,7 +156,7 @@ export function createCloudServer(dataRoot: string) {
         const plan = String(body.plan || "");
         if (!["free", "pro", "team"].includes(plan)) throw new ApiError("非法 plan", 400);
         if (!body.userId) throw new ApiError("缺少 userId", 400);
-        db.setPlan(String(body.userId), plan as "free" | "pro" | "team");
+        await db.setPlan(String(body.userId), plan as "free" | "pro" | "team");
         json(res, 200, { ok: true });
         return;
       }
@@ -154,7 +164,7 @@ export function createCloudServer(dataRoot: string) {
         requireAdmin(req);
         const body = JSON.parse(await readBody(req)) as { userId?: string; disabled?: boolean };
         if (!body.userId) throw new ApiError("缺少 userId", 400);
-        db.setDisabled(String(body.userId), Boolean(body.disabled));
+        await db.setDisabled(String(body.userId), Boolean(body.disabled));
         json(res, 200, { ok: true });
         return;
       }
@@ -162,7 +172,7 @@ export function createCloudServer(dataRoot: string) {
         requireAdmin(req);
         const body = JSON.parse(await readBody(req)) as { userId?: string };
         if (!body.userId) throw new ApiError("缺少 userId", 400);
-        db.adminMarkVerified(String(body.userId));
+        await db.adminMarkVerified(String(body.userId));
         json(res, 200, { ok: true });
         return;
       }
@@ -181,13 +191,12 @@ export function createCloudServer(dataRoot: string) {
       if (p === "/v1/auth/register" && method === "POST") {
         const body = JSON.parse(await readBody(req)) as { email?: string; password?: string };
         const email = String(body.email || "").toLowerCase().trim();
-        const r = db.register(email, String(body.password || ""));
+        const r = await db.register(email, String(body.password || ""));
         try {
           await sendVerifyCode(mail, email, r.verifyCode || "");
         } catch (e) {
           console.error("[mail] send failed", e);
         }
-        // 开发/内网：console/file 模式把 code 回传，便于联调
         const expose =
           mail.mode === "console" || mail.mode === "file" ? r.verifyCode : undefined;
         json(res, 201, {
@@ -207,7 +216,10 @@ export function createCloudServer(dataRoot: string) {
           return;
         }
         const body = JSON.parse(await readBody(req)) as { email?: string; code?: string };
-        const r = db.verifyEmail(String(body.email || "").toLowerCase().trim(), String(body.code || ""));
+        const r = await db.verifyEmail(
+          String(body.email || "").toLowerCase().trim(),
+          String(body.code || ""),
+        );
         json(res, 200, { ok: true, ...r, emailVerified: true });
         return;
       }
@@ -220,7 +232,7 @@ export function createCloudServer(dataRoot: string) {
         }
         const body = JSON.parse(await readBody(req)) as { email?: string };
         const email = String(body.email || "").toLowerCase().trim();
-        const r = db.resendVerifyCode(email);
+        const r = await db.resendVerifyCode(email);
         try {
           await sendVerifyCode(mail, email, r.code);
         } catch (e) {
@@ -235,7 +247,10 @@ export function createCloudServer(dataRoot: string) {
       if (p === "/v1/auth/login" && method === "POST") {
         const body = JSON.parse(await readBody(req)) as { email?: string; password?: string };
         try {
-          const r = db.login(String(body.email || "").toLowerCase().trim(), String(body.password || ""));
+          const r = await db.login(
+            String(body.email || "").toLowerCase().trim(),
+            String(body.password || ""),
+          );
           json(res, 200, r);
         } catch (e) {
           metrics.authFail++;
@@ -250,14 +265,14 @@ export function createCloudServer(dataRoot: string) {
           json(res, 401, { error: "缺少 Authorization: Bearer <token>" });
           return;
         }
-        const user = db.auth(token);
+        const user = await db.auth(token);
 
         if (p === "/v1/auth/change-password" && method === "POST") {
           const body = JSON.parse(await readBody(req)) as {
             oldPassword?: string;
             newPassword?: string;
           };
-          const r = db.changePassword(
+          const r = await db.changePassword(
             user.userId,
             String(body.oldPassword || ""),
             String(body.newPassword || ""),
@@ -266,22 +281,22 @@ export function createCloudServer(dataRoot: string) {
           return;
         }
         if (p === "/v1/auth/logout" && method === "POST") {
-          db.logout(token);
+          await db.logout(token);
           json(res, 200, { ok: true });
           return;
         }
         if (p === "/v1/auth/me" && method === "GET") {
-          const usage = db.usage(user.userId);
+          const usage = await db.usage(user.userId);
           json(res, 200, {
             userId: user.userId,
             email: user.email,
             plan: user.plan,
             usage,
             quota: quotaOf(user.plan),
+            backend: db.kind,
           });
           return;
         }
-        // 用户自助列表（远端对象）
         if (p === "/v1/sync/list" && method === "GET") {
           const rl = syncLimiter.check(ip);
           if (!rl.ok) {
@@ -289,12 +304,11 @@ export function createCloudServer(dataRoot: string) {
             json(res, 429, { error: "过于频繁" });
             return;
           }
-          const files = db.listUserObjects(user.userId);
+          const files = await db.listUserObjects(user.userId);
           json(res, 200, { files, count: files.length });
           return;
         }
 
-        // ---------- sync objects ----------
         if (p.startsWith("/v1/sync/") && (method === "GET" || method === "HEAD" || method === "PUT")) {
           const rl = syncLimiter.check(ip);
           if (!rl.ok) {
@@ -304,39 +318,31 @@ export function createCloudServer(dataRoot: string) {
           }
           const rel = safeRel(p.slice("/v1/sync/".length));
           if (rel === "list") {
-            // /v1/sync/list 已处理，防止落到文件
             json(res, 404, { error: "not found" });
             return;
-          }
-          const root = db.userDir(user.userId);
-          const abs = path.resolve(path.join(root, rel));
-          if (!abs.startsWith(path.resolve(root) + path.sep)) {
-            throw new ApiError("路径越界", 403);
           }
 
           if (method === "PUT") {
             metrics.syncPut++;
-            if (REQUIRE_EMAIL_VERIFY && !db.isEmailVerified(user.userId)) {
+            if (REQUIRE_EMAIL_VERIFY && !(await db.isEmailVerified(user.userId))) {
               json(res, 403, { error: "请先验证邮箱后再同步", code: "EMAIL_NOT_VERIFIED" });
               return;
             }
             const body = await readBody(req);
-            if (rel.endsWith(".harbor.enc.json")) {
-              const usage = db.usage(user.userId);
-              const quota = quotaOf(user.plan);
-              if (!fs.existsSync(abs) && usage.sessions >= quota.maxSessions) {
-                json(res, 402, {
-                  error: `会话数已达套餐上限（${user.plan}: ${quota.maxSessions}）`,
-                  upgrade: true,
-                });
+            try {
+              await db.putObject(user.userId, rel, body);
+            } catch (e) {
+              if (e instanceof ApiError && e.status === 402) {
+                json(res, 402, { error: e.message, upgrade: true });
                 return;
               }
+              throw e;
             }
-            atomicWrite(abs, body);
             json(res, 200, { ok: true, path: rel, bytes: Buffer.byteLength(body) });
             return;
           }
-          if (!fs.existsSync(abs)) {
+          const existing = await db.getObject(user.userId, rel);
+          if (existing == null) {
             json(res, 404, { error: "not found" });
             return;
           }
@@ -350,7 +356,7 @@ export function createCloudServer(dataRoot: string) {
             "Content-Type": "application/json; charset=utf-8",
             "Access-Control-Allow-Origin": "*",
           });
-          res.end(fs.readFileSync(abs));
+          res.end(existing);
           return;
         }
       }
@@ -381,11 +387,11 @@ export function createCloudServer(dataRoot: string) {
 
 const isMain = process.argv[1] && /server\.js$/.test(process.argv[1]);
 if (isMain) {
-  const { server, useTls } = createCloudServer(DATA);
+  const { server, db, useTls } = await createCloudServer(DATA);
   server.listen(PORT, () => {
     const scheme = useTls ? "https" : "http";
     console.log(`SessionHarbor Cloud  ${scheme}://127.0.0.1:${PORT}`);
-    console.log(`数据目录: ${DATA}`);
+    console.log(`后端: ${db.kind}${db.kind === "postgres" ? " (DATABASE_URL)" : ` 数据目录 ${DATA}`}`);
     console.log(`管理端: ${ADMIN_TOKEN ? "已启用 (HARBOR_CLOUD_ADMIN_TOKEN)" : "未设置 ADMIN_TOKEN"}`);
     console.log(`邮件通道: ${process.env.HARBOR_CLOUD_MAIL || "console"}`);
     console.log(`强制邮箱验证: ${REQUIRE_EMAIL_VERIFY ? "开" : "关"}`);

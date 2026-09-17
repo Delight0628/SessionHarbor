@@ -1,20 +1,21 @@
-{
-  "name": "@sessionharbor/cloud-server",
-  "version": "0.1.0",
-  "type": "module",
-  "main": "./dist/server.js",
-  "bin": {
-    "harbor-cloud": "./dist/server.js"
-  },
-  "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js"
-  },
-  "dependencies": {
-    "@sessionharbor/core": "workspace:*"
-  },
-  "devDependencies": {
-    "@types/node": "^24.0.0",
-    "typescript": "^5.7.0"
-  }
+﻿{
+    "name":  "@sessionharbor/cloud-server",
+    "version":  "0.1.0",
+    "type":  "module",
+    "main":  "./dist/server.js",
+    "bin":  {
+                "harbor-cloud":  "./dist/server.js"
+            },
+    "scripts":  {
+                    "build":  "tsc -p tsconfig.json",
+                    "start":  "node dist/server.js"
+                },
+    "dependencies":  {
+                         "@sessionharbor/core":  "workspace:*",
+                         "pg":  "^8.13.0"
+                     },
+    "devDependencies":  {
+                            "@types/node":  "^24.0.0",
+                            "typescript":  "^5.7.0"
+                        }
 }

@@ -132,11 +132,18 @@ function matchesFilter(
       (summary.title || "").toLowerCase().includes(kw) ||
       ir.items.some((item) => {
         if (item.type === "message") {
-          return item.content.some(
-            (b) => (b.type === "text" || b.type === "thinking") && b.text.toLowerCase().includes(kw),
+          return (item.content || []).some(
+            (b) =>
+              (b.type === "text" || b.type === "thinking") &&
+              String(b.text || "")
+                .toLowerCase()
+                .includes(kw),
           );
         }
-        if (item.type === "thinking") return item.text.toLowerCase().includes(kw);
+        if (item.type === "thinking")
+          return String(item.text || "")
+            .toLowerCase()
+            .includes(kw);
         return false;
       });
     if (!hit) return false;
@@ -184,9 +191,9 @@ export async function migrate(opts: MigrateOptions): Promise<MigrationReport> {
       if (opts.stripReminders !== false) {
         for (const item of ir.items) {
           if (item.type === "message" && item.role === "user") {
-            item.content = item.content.map((b) =>
-              b.type === "text" ? { ...b, text: stripReminders(b.text) } : b,
-            ).filter((b) => b.type !== "text" || b.text.trim().length > 0);
+            item.content = item.content
+              .map((b) => (b.type === "text" ? { ...b, text: stripReminders(b.text) } : b))
+              .filter((b) => b.type !== "text" || (b.text || "").trim().length > 0);
           }
         }
       }
@@ -205,13 +212,13 @@ export async function migrate(opts: MigrateOptions): Promise<MigrationReport> {
         const body = ir.items
           .map((item) => {
             if (item.type === "message")
-              return item.content.map((b) => (b.type === "text" ? b.text : "")).join("\n");
-            if (item.type === "thinking") return item.text;
-            if (item.type === "tool_output") return item.output;
+              return item.content.map((b) => (b.type === "text" ? b.text || "" : "")).join("\n");
+            if (item.type === "thinking") return item.text || "";
+            if (item.type === "tool_output") return item.output || "";
             return "";
           })
           .join("\n");
-        const scan = scanText(body + "\n" + ir.header.session.title);
+        const scan = scanText(String(body) + "\n" + String(ir.header.session.title || ""));
         if (scan.hits.length) {
           secretAgg.totalHits += scan.hits.length;
           if (scan.shouldBlockCloud) secretAgg.shouldBlockCloud = true;

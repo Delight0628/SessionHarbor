@@ -2,8 +2,9 @@
 
 const REMINDER_RE = /<system-reminder\b[^>]*>[\s\S]*?<\/system-reminder>\s*/g;
 
-export function stripReminders(text: string): string {
-  return text.replace(REMINDER_RE, "").trim();
+export function stripReminders(text: unknown): string {
+  const s = text == null ? "" : String(text);
+  return s.replace(REMINDER_RE, "").trim();
 }
 
 export function stripAllReminders(items: Array<{ role: string; content: string }>): Array<{ role: string; content: string }> {

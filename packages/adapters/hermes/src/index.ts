@@ -347,7 +347,7 @@ export class HermesAdapter implements Adapter {
               itemId: `item_${randomUUID().replace(/-/g, "").slice(0, 20)}`,
               callId: String(r.tool_call_id || r.id),
               toolName: String(r.tool_name),
-              input: undefined,
+              input: null,
               timestamp: ts,
             });
           }
@@ -366,7 +366,7 @@ export class HermesAdapter implements Adapter {
                 itemId: `item_${randomUUID().replace(/-/g, "").slice(0, 20)}`,
                 callId: String(o.id ?? randomUUID()),
                 toolName: String(fn.name ?? o.name ?? "tool"),
-                input: fn.arguments ?? o.input,
+                input: fn.arguments ?? o.input ?? null,
                 timestamp: ts,
               });
             }

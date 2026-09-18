@@ -123,12 +123,14 @@ const RULES: Array<{
   },
 ];
 
-function maskPreview(s: string): string {
-  if (s.length <= 8) return s[0] + "…" + s[s.length - 1];
+function maskPreview(raw: string): string {
+  const s = raw == null ? "" : String(raw);
+  if (s.length <= 8) return s[0] + "…" + (s.length ? s[s.length - 1] : "");
   return s.slice(0, 4) + "…" + s.slice(-4);
 }
 
-export function scanText(text: string): ScanResult {
+export function scanText(text: unknown): ScanResult {
+  const body = text == null ? "" : String(text);
   const hits: SecretHit[] = [];
   const byKind: Record<string, number> = {};
   let shouldBlockCloud = false;
@@ -137,7 +139,7 @@ export function scanText(text: string): ScanResult {
     rule.re.lastIndex = 0;
     let m: RegExpExecArray | null;
     let guard = 0;
-    while ((m = rule.re.exec(text)) !== null && guard++ < 500) {
+    while ((m = rule.re.exec(body)) !== null && guard++ < 500) {
       const raw = m[0];
       hits.push({
         kind: rule.kind,

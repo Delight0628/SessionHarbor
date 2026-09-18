@@ -495,7 +495,7 @@ export class MimoAdapter implements Adapter {
           ts,
           JSON.stringify({
             type: "text",
-            text: `[${item.label}]\n${item.files.map((f) => `- ${f}`).join("\n")}`,
+            text: `[${item.label}]\n${(item.files || []).map((f) => `- ${f}`).join("\n")}`,
             synthetic: true,
           }),
         );
@@ -515,13 +515,25 @@ export class MimoAdapter implements Adapter {
           .join("\n");
       } else if (item.type === "thinking") {
         role = "assistant";
-        text = `[thinking] ${item.text}`;
+        text = `[thinking] ${item.text ?? ""}`;
       } else if (item.type === "tool_call") {
         role = "assistant";
-        text = `[tool:${item.toolName}] ${JSON.stringify(item.input).slice(0, 400)}`;
+        // input 可能为 undefined/null；JSON.stringify(undefined) 返回 undefined，不能直接 .slice
+        const inputJson =
+          item.input === undefined
+            ? "null"
+            : (() => {
+                try {
+                  const s = JSON.stringify(item.input);
+                  return typeof s === "string" ? s : "null";
+                } catch {
+                  return String(item.input);
+                }
+              })();
+        text = `[tool:${item.toolName ?? "tool"}] ${inputJson.slice(0, 400)}`;
       } else if (item.type === "tool_output") {
         role = "assistant";
-        text = `[tool_result] ${item.output}`;
+        text = `[tool_result] ${item.output ?? ""}`;
       }
       if (!text.trim()) continue;
 

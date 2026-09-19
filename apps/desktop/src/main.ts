@@ -125,9 +125,17 @@ function cloudServerEntry(): string | null {
     path.join(WORKDIR, "packages", "cloud-server", "dist", "server.js"),
     path.join(appRoot(), "packages", "cloud-server", "dist", "server.js"),
     path.join(appRoot(), "cloud-server", "server.js"),
+    // 打包后 extraResources
+    (() => {
+      try {
+        return path.join(process.resourcesPath || "", "cloud-server", "server.js");
+      } catch {
+        return "";
+      }
+    })(),
   ];
   for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
+    if (c && fs.existsSync(c)) return c;
   }
   return null;
 }

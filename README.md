@@ -322,9 +322,9 @@ pnpm pack:exe
 
 如果 SessionHarbor 帮到了你，欢迎点个 ⭐ Star，让更多人看到。
 
-## 许可证
+## 许可证Delight
 
-[MIT](./LICENSE) © 高国兴
+[MIT](./LICENSE) © Delight
 
 ---
 

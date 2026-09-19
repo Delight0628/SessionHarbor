@@ -95,4 +95,4 @@ Details: [docs/项目开发文档.md](./docs/项目开发文档.md) and [docs/](
 
 ## License
 
-[MIT](./LICENSE) © 高国兴
+[MIT](./LICENSE) © Delight

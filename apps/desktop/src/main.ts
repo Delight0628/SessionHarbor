@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import fs from "node:fs";
 import path from "node:path";
+import { spawn, type ChildProcess } from "node:child_process";
 import {
   SessionIndex,
   SessionWatcher,
@@ -71,6 +72,120 @@ function appRoot(): string {
   return process.cwd();
 }
 const WORKDIR = process.env.HARBOR_WORKDIR || process.cwd();
+
+/** 内嵌托管云：启动时若配置了 DATABASE_URL / cloud.env 则自动拉起 cloud-server */
+let cloudChild: ChildProcess | null = null;
+
+function cloudServerEntry(): string | null {
+  const candidates = [
+    path.join(WORKDIR, "packages", "cloud-server", "dist", "server.js"),
+    path.join(appRoot(), "packages", "cloud-server", "dist", "server.js"),
+    path.join(appRoot(), "cloud-server", "server.js"),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
+
+function readCloudEnvFile(): Record<string, string> {
+  const p = path.join(WORKDIR, ".sessionharbor", "cloud.env");
+  if (!fs.existsSync(p)) return {};
+  const out: Record<string, string> = {};
+  for (const line of fs.readFileSync(p, "utf8").split(/\r?\n/)) {
+    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
+    if (m) out[m[1]!] = m[2]!.replace(/^["']|["']$/g, "");
+  }
+  return out;
+}
+
+async function startEmbeddedCloud(): Promise<void> {
+  const entry = cloudServerEntry();
+  if (!entry) return;
+  const envFile = readCloudEnvFile();
+  const cfg = loadOrCreateSyncConfig(WORKDIR);
+  const databaseUrl =
+    process.env.DATABASE_URL ||
+    envFile.DATABASE_URL ||
+    (cfg as { databaseUrl?: string }).databaseUrl ||
+    "";
+  // 无云库配置则不启内嵌服务
+  if (!databaseUrl && !envFile.HARBOR_CLOUD_DATA && !(cfg as { cloudRoot?: string }).cloudRoot) {
+    // 仍允许本地 SQLite 云（方便内网）
+    if (!envFile.HARBOR_CLOUD_PORT && !process.env.HARBOR_CLOUD_FORCE_EMBEDDED) return;
+  }
+  const port = String(
+    process.env.HARBOR_CLOUD_PORT || envFile.HARBOR_CLOUD_PORT || "8787",
+  );
+  const env = {
+    ...process.env,
+    ...envFile,
+    PORT: port,
+    HARBOR_CLOUD_PORT: port,
+    DATABASE_URL: databaseUrl || envFile.DATABASE_URL || "",
+    HARBOR_CLOUD_PG_SSL_INSECURE:
+      process.env.HARBOR_CLOUD_PG_SSL_INSECURE ||
+      envFile.HARBOR_CLOUD_PG_SSL_INSECURE ||
+      "1",
+    HARBOR_CLOUD_ADMIN_TOKEN:
+      process.env.HARBOR_CLOUD_ADMIN_TOKEN ||
+      envFile.HARBOR_CLOUD_ADMIN_TOKEN ||
+      "harbor-local-admin",
+    HARBOR_CLOUD_MAIL: process.env.HARBOR_CLOUD_MAIL || envFile.HARBOR_CLOUD_MAIL || "console",
+    HARBOR_CLOUD_DATA:
+      process.env.HARBOR_CLOUD_DATA ||
+      envFile.HARBOR_CLOUD_DATA ||
+      path.join(WORKDIR, ".sessionharbor", "cloud-data"),
+  };
+  if (env.DATABASE_URL) {
+    // 写回 sync 配置，GUI/CLI 统一 endpoint
+    const cfg2 = loadOrCreateSyncConfig(WORKDIR);
+    cfg2.targetKind = "hosted";
+    cfg2.hostedEndpoint = `http://127.0.0.1:${port}`;
+    (cfg2 as { databaseUrl?: string }).databaseUrl = env.DATABASE_URL;
+    if (!cfg2.license) {
+      cfg2.license = {
+        plan: "free",
+        hostedEndpoint: cfg2.hostedEndpoint,
+        expiresAt: new Date(Date.now() + 365 * 86400000).toISOString(),
+      };
+    }
+    saveSyncConfig(WORKDIR, cfg2);
+  }
+  cloudChild = spawn(process.execPath, [entry], {
+    env: {
+      ...env,
+      ELECTRON_RUN_AS_NODE: "1",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: false,
+  });
+  const logDir = path.join(WORKDIR, "logs");
+  try {
+    fs.mkdirSync(logDir, { recursive: true });
+    const logPath = path.join(logDir, "cloud-embed.log");
+    cloudChild.stdout?.on("data", (d) => {
+      try {
+        fs.appendFileSync(logPath, String(d));
+      } catch {
+        /* ignore */
+      }
+    });
+    cloudChild.stderr?.on("data", (d) => {
+      try {
+        fs.appendFileSync(logPath, String(d));
+      } catch {
+        /* ignore */
+      }
+    });
+  } catch {
+    /* ignore */
+  }
+  cloudChild.on("exit", (code) => {
+    console.log("embedded cloud-server exit", code);
+    cloudChild = null;
+  });
+}
 
 type ClientId =
   | "alink"
@@ -718,6 +833,7 @@ async function autoScanInstalled(): Promise<void> {
 }
 
 app.whenReady().then(() => {
+  void startEmbeddedCloud();
   const win = createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -736,6 +852,14 @@ app.whenReady().then(() => {
       }
     });
   });
+});
+
+app.on("before-quit", () => {
+  try {
+    cloudChild?.kill();
+  } catch {
+    /* ignore */
+  }
 });
 
 app.on("window-all-closed", () => {

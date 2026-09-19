@@ -636,6 +636,8 @@ export interface SyncConfig {
   webdavRemotePath?: string;
   hostedEndpoint?: string;
   hostedToken?: string;
+  /** Supabase/Neon 等 PG 连接串（仅本机配置，勿提交 Git） */
+  databaseUrl?: string;
   license?: import("./billing.js").License;
 }
 

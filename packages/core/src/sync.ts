@@ -367,44 +367,23 @@ export async function pushToCloud(opts: PushOptions): Promise<SyncResult> {
   );
   result.notes.push(
     opts.target.kind === "hosted"
-      ? "后端=托管云（付费能力）"
+      ? "后端=托管云"
       : opts.target.kind === "webdav"
         ? "后端=自备 WebDAV（免费 BYO）"
         : "后端=网盘/本地目录（免费 BYO）",
   );
 
-  // 托管云额度闸门
+  // 托管云：Free 允许；额度由服务端 402 兜底，本地仅提示
   if (opts.target.kind === "hosted") {
-    const enabled = hostedCloudEnabled(opts.license);
-    if (!enabled) {
-      result.notes.push("托管云需要有效订阅（Free 托管额度 / Pro / Team）。未订阅时请使用 BYO 目录或 WebDAV。");
-      if (!opts.dryRun) {
-        result.failed++;
-        result.items.push({
-          sessionId: "-",
-          title: "托管云",
-          status: "failed",
-          message: "无有效托管云订阅",
-        });
-        return result;
-      }
-    } else {
-      const usage = { sessions: manifest.entries.length, storageMb: 0 };
-      const qc = checkHostedQuota(opts.license, usage);
-      result.notes.push(`套餐额度: ${qc.plan}，已用会话 ${usage.sessions}`);
-      if (!qc.ok) {
-        result.notes.push(qc.reason + (qc.upgradeHint ? ` · ${qc.upgradeHint}` : ""));
-        if (!opts.dryRun) {
-          result.failed++;
-          result.items.push({
-            sessionId: "-",
-            title: "托管云",
-            status: "failed",
-            message: qc.reason || "额度不足",
-          });
-          return result;
-        }
-      }
+    const lic = opts.license || {
+      plan: "free" as const,
+      hostedEndpoint: opts.target.endpoint,
+    };
+    const usage = { sessions: manifest.entries.length, storageMb: 0 };
+    const qc = checkHostedQuota(lic, usage);
+    result.notes.push(`套餐额度: ${qc.plan}，已用会话 ${usage.sessions}`);
+    if (!qc.ok) {
+      result.notes.push(qc.reason + (qc.upgradeHint ? ` · ${qc.upgradeHint}` : ""));
     }
   }
 

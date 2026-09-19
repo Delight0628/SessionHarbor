@@ -73,6 +73,50 @@ function appRoot(): string {
 }
 const WORKDIR = process.env.HARBOR_WORKDIR || process.cwd();
 
+/** 默认 Supabase（个人项目 Delight0628）；仅写入本机配置，勿提交仓库 */
+const DEFAULT_SUPABASE_URL =
+  process.env.HARBOR_DEFAULT_DATABASE_URL ||
+  "postgresql://postgres.hnrvuzgljxwixspbwgaw:ggxqq2607101627@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres";
+
+/** 启动时若无 cloud 配置则自动写入（等同 setup-supabase.ps1） */
+function ensureCloudSetup(): void {
+  try {
+    const dir = path.join(WORKDIR, ".sessionharbor");
+    const envFile = path.join(dir, "cloud.env");
+    const syncDir = path.join(dir, "sync");
+    const syncFile = path.join(syncDir, "config.json");
+    fs.mkdirSync(syncDir, { recursive: true });
+    if (!fs.existsSync(envFile) && DEFAULT_SUPABASE_URL) {
+      fs.writeFileSync(
+        envFile,
+        [
+          `DATABASE_URL=${DEFAULT_SUPABASE_URL}`,
+          "HARBOR_CLOUD_PG_SSL_INSECURE=1",
+          "HARBOR_CLOUD_ADMIN_TOKEN=admin-delight-0628",
+          "HARBOR_CLOUD_MAIL=console",
+          "HARBOR_CLOUD_PORT=8787",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+    }
+    const cfg = loadOrCreateSyncConfig(WORKDIR);
+    let changed = false;
+    if (DEFAULT_SUPABASE_URL && !(cfg as { databaseUrl?: string }).databaseUrl) {
+      (cfg as { databaseUrl?: string }).databaseUrl = DEFAULT_SUPABASE_URL;
+      changed = true;
+    }
+    if (cfg.targetKind !== "hosted" || !cfg.hostedEndpoint) {
+      cfg.targetKind = "hosted";
+      cfg.hostedEndpoint = "http://127.0.0.1:8787";
+      changed = true;
+    }
+    if (changed) saveSyncConfig(WORKDIR, cfg);
+  } catch (e) {
+    console.error("ensureCloudSetup", e);
+  }
+}
+
 /** 内嵌托管云：启动时若配置了 DATABASE_URL / cloud.env 则自动拉起 cloud-server */
 let cloudChild: ChildProcess | null = null;
 
@@ -833,6 +877,7 @@ async function autoScanInstalled(): Promise<void> {
 }
 
 app.whenReady().then(() => {
+  ensureCloudSetup();
   void startEmbeddedCloud();
   const win = createWindow();
   app.on("activate", () => {

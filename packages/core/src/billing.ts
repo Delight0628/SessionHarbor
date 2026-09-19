@@ -110,10 +110,9 @@ export function planDisplay(lic: License | undefined): string {
   return `${plan === "pro" ? "Pro" : "Team"} · 至 ${lic?.expiresAt?.slice(0, 10) || "长期"}`;
 }
 
-/** 托管云是否启用（用户配了 endpoint 且许可证有效） */
+/** 托管云是否启用：配置了 endpoint 即可用（Free 也允许，受额度限制） */
 export function hostedCloudEnabled(lic: License | undefined): boolean {
-  const plan = effectivePlan(lic);
-  return plan !== "free" && Boolean(lic?.hostedEndpoint);
+  return Boolean(lic?.hostedEndpoint);
 }
 
 export function formatPricing(): string {

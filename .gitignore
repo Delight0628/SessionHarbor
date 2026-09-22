@@ -43,6 +43,13 @@ auth.json
 .vscode/
 .idea/
 .claude/
+.playwright-cli/
+
+# 本地联调/临时运行数据
+.tmp-pg2/
+tmp-pg*/
+webdav-data/
+webdav-data2/
 
 # 本机调试脚本（写死本机路径，不入库）
 scripts/hermes-agent-*.py

@@ -121,7 +121,14 @@ function walk(dir, out = []) {
 
 const found = walk(REL);
 console.log("found", found);
-const preferred = found.find((p) => p.includes("win-x64")) || found[0];
+// 便携版 SFX 约 80MB；win-unpacked 的 electron.exe 约 200MB+（缺同级 DLL 会 ICU 崩溃，不能单独拷根目录）
+const preferred =
+  found
+    .map((p) => ({ p, size: fs.statSync(p).size }))
+    .filter((x) => x.size < 150 * 1024 * 1024)
+    .sort((a, b) => b.size - a.size)[0]?.p ||
+  found.find((p) => /portable|SessionHarbor-.*win-x64\.exe$/i.test(p)) ||
+  found[0];
 if (!preferred) throw new Error("no portable exe");
 console.log("preferred", preferred, fs.statSync(preferred).size);
 

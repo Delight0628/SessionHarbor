@@ -44,6 +44,10 @@ auth.json
 .idea/
 .claude/
 
+# 本机调试脚本（写死本机路径，不入库）
+scripts/hermes-agent-*.py
+scripts/hermes-run-oneshot.py
+
 # 大体积真实会话样本（本地用，不入库；仅保留小体积脱敏 fixture）
 fixtures/claude-code/0089fd68-3f83-4028-897c-b954525b3b3c.jsonl
 fixtures/claude-code/046b83df-b531-4b1f-96f1-5411aa6328cb.jsonl

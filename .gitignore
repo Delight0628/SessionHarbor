@@ -60,3 +60,7 @@ fixtures/claude-code/0089fd68-3f83-4028-897c-b954525b3b3c.jsonl
 fixtures/claude-code/046b83df-b531-4b1f-96f1-5411aa6328cb.jsonl
 fixtures/**/*.sqlite
 fixtures/**/*.db
+
+# 恢复会话导出（含服务器账号/密钥等敏感信息，严禁入库）
+恢复会话_*.md
+recovery-session-*.md

@@ -146,13 +146,19 @@ def main():
             "INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             (
-                new_prt_id(),
+                prt_id := new_prt_id(),
                 msg_id,
                 session_id,
                 ts,
                 ts,
                 json.dumps({"type": "text", "text": m["text"], "synthetic": False}, ensure_ascii=False),
             ),
+        )
+        # MiMo fork 依赖 history_fts 做转录复制
+        conn.execute(
+            "INSERT INTO history_fts (part_id, session_id, message_id, project_id, tool_name, body, time_created) "
+            "VALUES (?, ?, ?, ?, NULL, ?, ?)",
+            (prt_id, session_id, msg_id, project_id, m["text"], ts),
         )
         last_id = msg_id
         n += 1

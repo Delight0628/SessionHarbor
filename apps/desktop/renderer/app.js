@@ -19,6 +19,8 @@ let activeGroup = null;
 let watching = false;
 /** 多选：key = `${client}::${id}` */
 const selected = new Set();
+/** Shift 连选锚点：key 或 null */
+let lastSelKey = null;
 
 function selKey(client, id) {
   return `${client}::${id}`;
@@ -48,12 +50,25 @@ function updateSelUI() {
 
 function clearSelection() {
   selected.clear();
+  lastSelKey = null;
   document.querySelectorAll(".item.selected").forEach((n) => n.classList.remove("selected"));
+  document.querySelectorAll(".item-check.checked").forEach((n) => {
+    n.classList.remove("checked");
+    n.setAttribute("aria-pressed", "false");
+    n.innerHTML = "";
+  });
   document.querySelectorAll(".group-check.checked").forEach((n) => {
     n.classList.remove("checked");
-    n.textContent = "☐";
+    n.setAttribute("aria-pressed", "false");
+    n.innerHTML = "";
   });
   updateSelUI();
+}
+
+function setCheckVisual(node, on) {
+  node.classList.toggle("checked", on);
+  node.setAttribute("aria-pressed", on ? "true" : "false");
+  node.innerHTML = on ? '<span class="tick"></span>' : "";
 }
 
 function toggleItemSel(node, force) {
@@ -64,24 +79,58 @@ function toggleItemSel(node, force) {
   if (on) selected.add(key);
   else selected.delete(key);
   node.classList.toggle("selected", on);
+  setCheckVisual(node.querySelector(".item-check"), on);
+  lastSelKey = key;
   // 同步该组头勾选
   const section = node.closest(".group");
-  if (section) {
-    const boxes = [...section.querySelectorAll(".item")];
-    const all = boxes.length > 0 && boxes.every((b) => selected.has(selKey(b.dataset.client, b.dataset.id)));
-    const gc = section.querySelector(".group-check");
-    if (gc) {
-      gc.classList.toggle("checked", all);
-      gc.textContent = all ? "☑" : "☐";
-    }
+  if (section) syncGroupHead(section);
+  updateSelUI();
+}
+
+function syncGroupHead(section) {
+  const boxes = [...section.querySelectorAll(".item")];
+  const all = boxes.length > 0 && boxes.every((b) => selected.has(selKey(b.dataset.client, b.dataset.id)));
+  const gc = section.querySelector(".group-check");
+  if (gc) setCheckVisual(gc, all);
+}
+
+/** Shift 点击：从锚点到当前项连选 */
+function rangeSelect(node, on) {
+  const all = [...document.querySelectorAll(".item")];
+  const cur = all.indexOf(node);
+  if (cur < 0) return toggleItemSel(node, on);
+  const anchorKey = lastSelKey;
+  let start = cur;
+  if (anchorKey) {
+    const ai = all.findIndex((n) => selKey(n.dataset.client, n.dataset.id) === anchorKey);
+    if (ai >= 0) start = ai;
   }
+  const [a, b] = start <= cur ? [start, cur] : [cur, start];
+  for (let i = a; i <= b; i++) {
+    const key = selKey(all[i].dataset.client, all[i].dataset.id);
+    if (on) selected.add(key);
+    else selected.delete(key);
+    all[i].classList.toggle("selected", on);
+    setCheckVisual(all[i].querySelector(".item-check"), on);
+  }
+  document.querySelectorAll(".group").forEach(syncGroupHead);
   updateSelUI();
 }
 
 function toggleGroupSel(section) {
   const boxes = [...section.querySelectorAll(".item")];
   const all = boxes.length > 0 && boxes.every((b) => selected.has(selKey(b.dataset.client, b.dataset.id)));
-  for (const b of boxes) toggleItemSel(b, !all);
+  for (const b of boxes) {
+    const on = !all;
+    const key = selKey(b.dataset.client, b.dataset.id);
+    if (on) selected.add(key);
+    else selected.delete(key);
+    b.classList.toggle("selected", on);
+    setCheckVisual(b.querySelector(".item-check"), on);
+  }
+  lastSelKey = boxes.length ? selKey(boxes[boxes.length - 1].dataset.client, boxes[boxes.length - 1].dataset.id) : null;
+  syncGroupHead(section);
+  updateSelUI();
 }
 
 function fmtTs(ms) {
@@ -125,11 +174,14 @@ function bindItems(root) {
   root.querySelectorAll(".item").forEach((node) => {
     node.addEventListener("click", (e) => {
       const key = selKey(node.dataset.client, node.dataset.id);
-      // 复选框 / Ctrl|Cmd|Shift 点击 → 多选；普通点击 → 打开并单选高亮
       const isCheck = e.target.closest(".item-check");
+      // Shift：连选；Ctrl/Cmd 或复选框：单点切换
       if (isCheck || e.ctrlKey || e.metaKey || e.shiftKey) {
         e.preventDefault();
-        toggleItemSel(node, isCheck ? !selected.has(key) : undefined);
+        e.stopPropagation();
+        if (e.shiftKey && !isCheck) rangeSelect(node, true);
+        else if (e.shiftKey && isCheck) rangeSelect(node, !selected.has(key));
+        else toggleItemSel(node, isCheck ? !selected.has(key) : undefined);
         return;
       }
       root.querySelectorAll(".item").forEach((n) => n.classList.remove("active"));
@@ -146,7 +198,7 @@ function itemHtml(s) {
   const on = selected.has(key);
   return `
     <div class="item${on ? " selected" : ""}" data-client="${escapeHtml(s.client)}" data-id="${escapeHtml(s.id)}" style="--rail:${color}">
-      <button type="button" class="item-check${on ? " checked" : ""}" title="多选（Ctrl/Shift 点击也可）" aria-pressed="${on ? "true" : "false"}">${on ? "☑" : "☐"}</button>
+      <button type="button" class="item-check${on ? " checked" : ""}" title="多选（Ctrl/Shift 连选）" aria-pressed="${on ? "true" : "false"}">${on ? '<span class="tick"></span>' : ""}</button>
       <div class="item-body">
         <div class="t">${escapeHtml(s.title || s.id)}</div>
         <div class="m">
@@ -191,7 +243,7 @@ function renderList(items) {
       return `
       <section class="group" data-group="${escapeHtml(name)}">
         <div class="group-head" data-gi="${gi}">
-          <button type="button" class="group-check" title="全选/取消本组">☐</button>
+          <button type="button" class="group-check" title="全选/取消本组" aria-pressed="false"></button>
           <span class="chev">▼</span>
           <span class="folder">◆</span>
           <span class="name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
@@ -227,28 +279,13 @@ function renderList(items) {
       const body = section.querySelector(".group-body");
       body.innerHTML = list.map(itemHtml).join("");
       bindItems(body);
-      const boxes = [...section.querySelectorAll(".item")];
-      const all = boxes.length > 0 && boxes.every((b) => selected.has(selKey(b.dataset.client, b.dataset.id)));
-      const gc = section.querySelector(".group-check");
-      if (gc) {
-        gc.classList.toggle("checked", all);
-        gc.textContent = all ? "☑" : "☐";
-      }
+      syncGroupHead(section);
       updateSelUI();
     });
   });
 
   bindItems(el);
-  // 同步组头勾选状态
-  el.querySelectorAll(".group").forEach((section) => {
-    const boxes = [...section.querySelectorAll(".item")];
-    const all = boxes.length > 0 && boxes.every((b) => selected.has(selKey(b.dataset.client, b.dataset.id)));
-    const gc = section.querySelector(".group-check");
-    if (gc) {
-      gc.classList.toggle("checked", all);
-      gc.textContent = all ? "☑" : "☐";
-    }
-  });
+  el.querySelectorAll(".group").forEach(syncGroupHead);
   updateSelUI();
 }
 

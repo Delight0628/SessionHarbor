@@ -322,51 +322,64 @@
     .group.collapsed .group-head .chev { transform: rotate(-90deg); }
 
     .item {
-      padding: 8px 12px 8px 10px;
+      padding: 8px 12px 8px 8px;
       cursor: pointer;
-      border-left: 3px solid var(--rail, transparent);
+      border-left: 3px solid transparent;
       border-bottom: 1px solid transparent;
       transition: background 0.12s, border-color 0.12s;
       display: flex;
       gap: 8px;
       align-items: flex-start;
     }
+    .item::before {
+      content: "";
+      width: 3px;
+      height: 18px;
+      margin-top: 4px;
+      border-radius: 2px;
+      background: var(--rail, transparent);
+      opacity: 0.55;
+      flex-shrink: 0;
+    }
     .item:hover { background: rgba(22, 32, 51, 0.65); }
     .item.active {
       background: var(--sea-dim);
-      border-left-color: var(--sea) !important;
+      border-left-color: var(--sea);
     }
     .item.selected {
       background: rgba(230, 184, 77, 0.1);
     }
     .item.selected.active {
       background: linear-gradient(90deg, var(--sea-dim), rgba(230, 184, 77, 0.12));
-      border-left-color: var(--sea) !important;
+      border-left-color: var(--sea);
     }
     .item-check, .group-check {
       flex-shrink: 0;
-      width: 22px;
-      height: 22px;
+      width: 18px;
+      height: 18px;
       padding: 0;
-      margin-top: 1px;
+      margin-top: 2px;
       border-radius: 5px;
-      border: 1px solid var(--line);
-      background: var(--panel-2);
-      color: var(--dim);
-      font-size: 13px;
-      line-height: 1;
+      border: 1.5px solid #4a5a72;
+      background: #152033;
       cursor: pointer;
       display: grid;
       place-items: center;
+      transition: border-color 0.12s, background 0.12s;
     }
     .item-check:hover, .group-check:hover {
-      border-color: var(--sea-line);
-      color: var(--sea);
+      border-color: var(--sea);
     }
     .item-check.checked, .group-check.checked {
-      border-color: rgba(230, 184, 77, 0.55);
-      background: var(--gold-dim);
-      color: var(--gold);
+      border-color: var(--sea);
+      background: linear-gradient(180deg, #3eb8e8, #2a9fd0);
+    }
+    .item-check .tick, .group-check .tick {
+      width: 8px;
+      height: 5px;
+      border-left: 2px solid #041018;
+      border-bottom: 2px solid #041018;
+      transform: rotate(-45deg) translateY(-1px);
     }
     .item-body { flex: 1; min-width: 0; }
     .item .t {

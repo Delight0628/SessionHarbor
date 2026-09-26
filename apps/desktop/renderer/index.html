@@ -237,6 +237,21 @@
       align-items: center;
       gap: 8px;
       background: rgba(10, 16, 26, 0.45);
+      flex-wrap: wrap;
+    }
+    .list-head .sel-tools {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+    .list-head .sel-tools button {
+      padding: 2px 8px;
+      font-size: 11px;
+    }
+    .list-head #selInfo {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--gold);
     }
     .list-head #listSrc {
       font-family: var(--mono);
@@ -307,17 +322,53 @@
     .group.collapsed .group-head .chev { transform: rotate(-90deg); }
 
     .item {
-      padding: 9px 12px 9px 16px;
+      padding: 8px 12px 8px 10px;
       cursor: pointer;
       border-left: 3px solid var(--rail, transparent);
       border-bottom: 1px solid transparent;
       transition: background 0.12s, border-color 0.12s;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
     }
     .item:hover { background: rgba(22, 32, 51, 0.65); }
     .item.active {
       background: var(--sea-dim);
       border-left-color: var(--sea) !important;
     }
+    .item.selected {
+      background: rgba(230, 184, 77, 0.1);
+    }
+    .item.selected.active {
+      background: linear-gradient(90deg, var(--sea-dim), rgba(230, 184, 77, 0.12));
+      border-left-color: var(--sea) !important;
+    }
+    .item-check, .group-check {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      margin-top: 1px;
+      border-radius: 5px;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--dim);
+      font-size: 13px;
+      line-height: 1;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+    }
+    .item-check:hover, .group-check:hover {
+      border-color: var(--sea-line);
+      color: var(--sea);
+    }
+    .item-check.checked, .group-check.checked {
+      border-color: rgba(230, 184, 77, 0.55);
+      background: var(--gold-dim);
+      color: var(--gold);
+    }
+    .item-body { flex: 1; min-width: 0; }
     .item .t {
       font-weight: 500;
       white-space: nowrap;
@@ -586,7 +637,7 @@
       <select id="migrateTo" aria-label="迁移目标">
         <option value="">迁移到…</option>
       </select>
-      <button id="btnMigrate" class="ghost">迁移选中</button>
+      <button id="btnMigrate" class="ghost" title="迁移已多选（或当前打开）的会话">迁移选中</button>
     </div>
     <span class="sep"></span>
     <div class="toolbar-group">
@@ -631,6 +682,11 @@
     <aside>
       <div class="list-head">
         <span id="listCount">…</span>
+        <div class="sel-tools">
+          <span id="selInfo">多选</span>
+          <button id="btnSelAll" class="ghost" type="button" title="全选当前列表">全选</button>
+          <button id="btnClearSel" class="ghost hidden" type="button" title="清空多选">清空</button>
+        </div>
         <span id="listSrc">—</span>
       </div>
       <div id="list" class="list">

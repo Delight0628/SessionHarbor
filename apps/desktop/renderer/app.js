@@ -17,6 +17,72 @@ let activeId = null;
 let activeClient = null;
 let activeGroup = null;
 let watching = false;
+/** 多选：key = `${client}::${id}` */
+const selected = new Set();
+
+function selKey(client, id) {
+  return `${client}::${id}`;
+}
+
+function selectedSessions() {
+  const out = [];
+  for (const key of selected) {
+    const i = key.indexOf("::");
+    if (i < 0) continue;
+    const client = key.slice(0, i);
+    const id = key.slice(i + 2);
+    const s = sessions.find((x) => x.client === client && x.id === id);
+    out.push(s ? { ...s, client, id } : { client, id, title: id });
+  }
+  return out;
+}
+
+function updateSelUI() {
+  const n = selected.size;
+  const el = $("#selInfo");
+  if (el) el.textContent = n > 0 ? `已选 ${n} 个会话` : "多选";
+  const clearBtn = $("#btnClearSel");
+  if (clearBtn) clearBtn.classList.toggle("hidden", n === 0);
+  $("#listCount").textContent = `${sessions.length} 个会话${n ? ` · 已选 ${n}` : ""}`;
+}
+
+function clearSelection() {
+  selected.clear();
+  document.querySelectorAll(".item.selected").forEach((n) => n.classList.remove("selected"));
+  document.querySelectorAll(".group-check.checked").forEach((n) => {
+    n.classList.remove("checked");
+    n.textContent = "☐";
+  });
+  updateSelUI();
+}
+
+function toggleItemSel(node, force) {
+  const client = node.dataset.client;
+  const id = node.dataset.id;
+  const key = selKey(client, id);
+  const on = force != null ? force : !selected.has(key);
+  if (on) selected.add(key);
+  else selected.delete(key);
+  node.classList.toggle("selected", on);
+  // 同步该组头勾选
+  const section = node.closest(".group");
+  if (section) {
+    const boxes = [...section.querySelectorAll(".item")];
+    const all = boxes.length > 0 && boxes.every((b) => selected.has(selKey(b.dataset.client, b.dataset.id)));
+    const gc = section.querySelector(".group-check");
+    if (gc) {
+      gc.classList.toggle("checked", all);
+      gc.textContent = all ? "☑" : "☐";
+    }
+  }
+  updateSelUI();
+}
+
+function toggleGroupSel(section) {
+  const boxes = [...section.querySelectorAll(".item")];
+  const all = boxes.length > 0 && boxes.every((b) => selected.has(selKey(b.dataset.client, b.dataset.id)));
+  for (const b of boxes) toggleItemSel(b, !all);
+}
 
 function fmtTs(ms) {
   if (!ms) return "-";
@@ -57,7 +123,15 @@ function emptyHtml(title, hint, icon = "◎") {
 
 function bindItems(root) {
   root.querySelectorAll(".item").forEach((node) => {
-    node.addEventListener("click", () => {
+    node.addEventListener("click", (e) => {
+      const key = selKey(node.dataset.client, node.dataset.id);
+      // 复选框 / Ctrl|Cmd|Shift 点击 → 多选；普通点击 → 打开并单选高亮
+      const isCheck = e.target.closest(".item-check");
+      if (isCheck || e.ctrlKey || e.metaKey || e.shiftKey) {
+        e.preventDefault();
+        toggleItemSel(node, isCheck ? !selected.has(key) : undefined);
+        return;
+      }
       root.querySelectorAll(".item").forEach((n) => n.classList.remove("active"));
       node.classList.add("active");
       openSession(node.dataset.client, node.dataset.id);
@@ -68,14 +142,19 @@ function bindItems(root) {
 function itemHtml(s) {
   const color = clientColor(s.client);
   const ts = s.updatedAtMs || s.createdAtMs;
+  const key = selKey(s.client, s.id);
+  const on = selected.has(key);
   return `
-    <div class="item" data-client="${escapeHtml(s.client)}" data-id="${escapeHtml(s.id)}" style="--rail:${color}">
-      <div class="t">${escapeHtml(s.title || s.id)}</div>
-      <div class="m">
-        <span class="src-dot" style="background:${color}"></span>
-        <time>${fmtTs(ts)}</time>
-        <span>·</span>
-        <span>${s.messageCount ?? "-"} 条</span>
+    <div class="item${on ? " selected" : ""}" data-client="${escapeHtml(s.client)}" data-id="${escapeHtml(s.id)}" style="--rail:${color}">
+      <button type="button" class="item-check${on ? " checked" : ""}" title="多选（Ctrl/Shift 点击也可）" aria-pressed="${on ? "true" : "false"}">${on ? "☑" : "☐"}</button>
+      <div class="item-body">
+        <div class="t">${escapeHtml(s.title || s.id)}</div>
+        <div class="m">
+          <span class="src-dot" style="background:${color}"></span>
+          <time>${fmtTs(ts)}</time>
+          <span>·</span>
+          <span>${s.messageCount ?? "-"} 条</span>
+        </div>
       </div>
     </div>`;
 }
@@ -112,6 +191,7 @@ function renderList(items) {
       return `
       <section class="group" data-group="${escapeHtml(name)}">
         <div class="group-head" data-gi="${gi}">
+          <button type="button" class="group-check" title="全选/取消本组">☐</button>
           <span class="chev">▼</span>
           <span class="folder">◆</span>
           <span class="name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
@@ -125,9 +205,14 @@ function renderList(items) {
     })
     .join("");
 
-  // 折叠/展开
+  // 折叠/展开；组头勾选全选
   el.querySelectorAll(".group-head").forEach((head) => {
-    head.addEventListener("click", () => {
+    head.addEventListener("click", (e) => {
+      if (e.target.closest(".group-check")) {
+        e.stopPropagation();
+        toggleGroupSel(head.closest(".group"));
+        return;
+      }
       head.closest(".group")?.classList.toggle("collapsed");
     });
   });
@@ -142,10 +227,29 @@ function renderList(items) {
       const body = section.querySelector(".group-body");
       body.innerHTML = list.map(itemHtml).join("");
       bindItems(body);
+      const boxes = [...section.querySelectorAll(".item")];
+      const all = boxes.length > 0 && boxes.every((b) => selected.has(selKey(b.dataset.client, b.dataset.id)));
+      const gc = section.querySelector(".group-check");
+      if (gc) {
+        gc.classList.toggle("checked", all);
+        gc.textContent = all ? "☑" : "☐";
+      }
+      updateSelUI();
     });
   });
 
   bindItems(el);
+  // 同步组头勾选状态
+  el.querySelectorAll(".group").forEach((section) => {
+    const boxes = [...section.querySelectorAll(".item")];
+    const all = boxes.length > 0 && boxes.every((b) => selected.has(selKey(b.dataset.client, b.dataset.id)));
+    const gc = section.querySelector(".group-check");
+    if (gc) {
+      gc.classList.toggle("checked", all);
+      gc.textContent = all ? "☑" : "☐";
+    }
+  });
+  updateSelUI();
 }
 
 function toolbarHtml(client, id) {
@@ -292,8 +396,12 @@ async function toggleWatch() {
 }
 
 async function doMigrate() {
-  if (!activeId || !activeClient) {
-    status("请先选择一个会话");
+  const picked = selectedSessions();
+  const useMulti = picked.length > 0;
+  const fromClient = useMulti ? picked[0].client : activeClient;
+  const ids = useMulti ? picked.map((p) => p.id) : activeId ? [activeId] : [];
+  if (!ids.length || !fromClient) {
+    status("请先选择会话（可多选：点 ☐ 或 Ctrl/Shift 点击）");
     return;
   }
   const to = $("#migrateTo").value;
@@ -301,23 +409,26 @@ async function doMigrate() {
     status("请选择目标客户端");
     return;
   }
-  if (to === activeClient) {
+  if (to === fromClient) {
     status("目标与源相同");
     return;
   }
-  if (activeClient === "chatgpt-export") {
-    // chatgpt-export 只读，仍可作为源迁出
+  // 多选时若混入其它客户端，按客户端分组提示
+  const clients = new Set(picked.map((p) => p.client));
+  if (useMulti && clients.size > 1) {
+    status(`多选含多个来源（${[...clients].join("、")}），请先只选同一来源`);
+    return;
   }
   const dry = !confirm(
-    `将选中会话从 ${activeClient} 迁移到 ${to}？\n\n确定 = 真实写入（目标已存在则覆盖）\n取消 = 仅预览 dry-run`,
+    `将 ${ids.length} 个会话从 ${fromClient} 迁移到 ${to}？\n\n确定 = 真实写入（目标已存在则覆盖）\n取消 = 仅预览 dry-run`,
   );
-  status(dry ? "dry-run…" : "迁移中…");
+  status(dry ? "dry-run…" : `迁移 ${ids.length} 个会话…`);
   $("#btnMigrate").disabled = true;
   try {
     const r = await harborApi().migrate({
-      from: activeClient,
+      from: fromClient,
       to,
-      ids: [activeId],
+      ids,
       dryRun: dry,
       yes: !dry,
       overwrite: true,
@@ -406,12 +517,20 @@ async function doSync(direction = "push") {
     }
     opts.group = g;
   } else if (scope === "session") {
-    if (!activeId || !activeClient) {
+    const picked = selectedSessions();
+    if (picked.length) {
+      opts.sessionId = picked[0].id;
+      opts.client = picked[0].client;
+      if (picked.length > 1) {
+        status(`云同步按单会话设计，已取多选中的第 1 个（共选 ${picked.length}）`);
+      }
+    } else if (activeId && activeClient) {
+      opts.sessionId = activeId;
+      opts.client = activeClient;
+    } else {
       status("请先选择一条会话");
       return;
     }
-    opts.sessionId = activeId;
-    opts.client = activeClient;
   }
   const label = direction === "pull" ? "从云拉取" : "推送到云";
   const dry = !confirm(
@@ -444,9 +563,17 @@ $("#btnWatch").addEventListener("click", toggleWatch);
 $("#btnMigrate").addEventListener("click", doMigrate);
 $("#btnSync").addEventListener("click", () => doSync("push"));
 $("#btnPull").addEventListener("click", () => doSync("pull"));
+$("#btnClearSel")?.addEventListener("click", clearSelection);
+$("#btnSelAll")?.addEventListener("click", () => {
+  document.querySelectorAll(".item").forEach((n) => toggleItemSel(n, true));
+  status(`已选 ${selected.size} 个会话`);
+});
 $("#filter").addEventListener("keydown", (e) => e.key === "Enter" && loadList());
 $("#query").addEventListener("keydown", (e) => e.key === "Enter" && doSearch());
-$("#client").addEventListener("change", loadList);
+$("#client").addEventListener("change", () => {
+  clearSelection();
+  loadList();
+});
 
 // ---------- 云账号 ----------
 async function cloudRefresh() {

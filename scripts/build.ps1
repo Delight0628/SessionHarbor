@@ -52,4 +52,4 @@ Write-Host "`n构建完成" -ForegroundColor Green
 Write-Host "  CLI:   node packages\cli\dist\bin.js info"
 Write-Host "  云:    node packages\cloud-server\dist\server.js"
 Write-Host "  GUI:   cd apps\desktop; npx electron ."
-Write-Host "  或:    .\SessionHarbor.exe（便携版）"
+Write-Host "  EXE:   .\SessionHarbor.exe (portable)"

@@ -45,6 +45,9 @@ auth.json
 .claude/
 .playwright-cli/
 
+# 本地 pnpm 钩子占位（按需生成）
+.pnpmfile.mjs
+
 # 本地联调/临时运行数据
 .tmp-pg2/
 tmp-pg*/

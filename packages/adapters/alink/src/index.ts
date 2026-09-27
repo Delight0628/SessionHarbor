@@ -622,32 +622,98 @@ function writeJsonl(filePath: string, ir: HarborIR, sessionId: string): number {
       },
     }),
   );
+
+  // 按 user prompt 切轮；每轮末尾写 result，恢复耗时/操作栏
+  type Turn = {
+    clientMessageId: string;
+    promptLineIndex: number;
+    promptTs: string;
+    promptSummary: string;
+    resultText: string;
+    startMs: number;
+    endMs: number;
+    toolCount: number;
+  };
+  const turns: Turn[] = [];
+  let current: Turn | null = null;
   let count = 0;
+
+  const flushResult = (turn: Turn) => {
+    const duration = Math.max(1000, turn.endMs - turn.startMs);
+    const resultUuid = randomUUID();
+    lines.push(
+      JSON.stringify({
+        type: "result",
+        sessionId,
+        timestamp: isoZ(turn.endMs),
+        data: {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          duration_api_ms: duration,
+          duration_ms: duration,
+          num_turns: 1 + turn.toolCount,
+          stop_reason: "end_turn",
+          session_id: sessionId,
+          total_cost_usd: 0,
+          usage: {
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+          result: turn.resultText,
+          uuid: resultUuid,
+          ttft_ms: Math.min(2000, duration),
+          terminal_reason: "migrated",
+        },
+      }),
+    );
+    count++;
+  };
+
   for (const item of ir.items) {
-    const itemTs = "timestamp" in item ? item.timestamp : undefined;
-    const ts = isoZ(itemTs ? Date.parse(itemTs) : createdMs);
+    const itemTs =
+      "timestamp" in item && item.timestamp
+        ? Date.parse(item.timestamp)
+        : createdMs;
+    const ts = isoZ(itemTs || createdMs);
+
     if (item.type === "message") {
+      const text = item.content
+        .map((b) => (b.type === "text" ? b.text : ""))
+        .filter(Boolean)
+        .join("\n");
+      if (!text) continue;
+
       if (item.role === "user") {
-        const text = item.content
-          .map((b) => (b.type === "text" ? b.text : ""))
-          .filter(Boolean)
-          .join("\n");
-        if (!text) continue;
+        if (current) flushResult(current);
+        const cmid = randomUUID();
+        current = {
+          clientMessageId: cmid,
+          promptLineIndex: lines.length,
+          promptTs: ts,
+          promptSummary: text.slice(0, 120).replace(/\s+/g, " "),
+          resultText: "",
+          startMs: itemTs || createdMs,
+          endMs: itemTs || createdMs,
+          toolCount: 0,
+        };
+        turns.push(current);
         lines.push(
           JSON.stringify({
             type: "prompt",
             sessionId,
             timestamp: ts,
-            data: { prompt: text, clientMessageId: randomUUID() },
+            data: { prompt: text, clientMessageId: cmid },
           }),
         );
         count++;
       } else if (item.role === "assistant") {
-        const text = item.content
-          .map((b) => (b.type === "text" ? b.text : ""))
-          .filter(Boolean)
-          .join("\n");
-        if (!text) continue;
+        if (current) {
+          current.resultText = text.slice(0, 500);
+          current.endMs = itemTs || current.endMs;
+        }
         lines.push(
           JSON.stringify({
             type: "assistant",
@@ -659,6 +725,12 @@ function writeJsonl(filePath: string, ir: HarborIR, sessionId: string): number {
                 role: "assistant",
                 content: [{ type: "text", text }],
                 model: item.model || s.model || "migrated",
+                id: `msg_${randomUUID().replace(/-/g, "").slice(0, 24)}`,
+                usage: {
+                  input_tokens: 0,
+                  output_tokens: 0,
+                  total_tokens: 0,
+                },
               },
               session_id: sessionId,
               uuid: randomUUID(),
@@ -669,6 +741,7 @@ function writeJsonl(filePath: string, ir: HarborIR, sessionId: string): number {
         count++;
       }
     } else if (item.type === "thinking") {
+      if (current) current.endMs = itemTs || current.endMs;
       lines.push(
         JSON.stringify({
           type: "assistant",
@@ -689,6 +762,10 @@ function writeJsonl(filePath: string, ir: HarborIR, sessionId: string): number {
       );
       count++;
     } else if (item.type === "tool_call") {
+      if (current) {
+        current.toolCount++;
+        current.endMs = itemTs || current.endMs;
+      }
       lines.push(
         JSON.stringify({
           type: "assistant",
@@ -716,6 +793,7 @@ function writeJsonl(filePath: string, ir: HarborIR, sessionId: string): number {
       );
       count++;
     } else if (item.type === "tool_output") {
+      if (current) current.endMs = itemTs || current.endMs;
       lines.push(
         JSON.stringify({
           type: "user",
@@ -743,7 +821,6 @@ function writeJsonl(filePath: string, ir: HarborIR, sessionId: string): number {
       );
       count++;
     } else if (item.type === "checkpoint") {
-      // 产物汇总写成 system note，便于界面识别
       const files = item.files.length
         ? item.files.map((f) => `- ${f}`).join("\n")
         : "(无文件列表)";
@@ -762,7 +839,35 @@ function writeJsonl(filePath: string, ir: HarborIR, sessionId: string): number {
       count++;
     }
   }
-  fs.writeFileSync(filePath, lines.join("\n") + "\n", "utf-8");
+  if (current) flushResult(current);
+
+  fs.writeFileSync(filePath, lines.join("\n") + (lines.length ? "\n" : ""), "utf-8");
+
+  // prompt-navigation.json 边车（fork/跳转/摘要）
+  try {
+    const nav = {
+      version: 1,
+      source: {
+        size: fs.statSync(filePath).size,
+        mtimeMs: Date.now(),
+        ino: 0,
+      },
+      items: turns.map((t) => ({
+        id: `client:${t.clientMessageId}`,
+        promptLineIndex: t.promptLineIndex,
+        promptTimestamp: t.promptTs,
+        promptSummary: t.promptSummary,
+        resultSummary: (t.resultText || "").slice(0, 200),
+      })),
+    };
+    fs.writeFileSync(
+      filePath.replace(/\.jsonl$/, "") + ".prompt-navigation.json",
+      JSON.stringify(nav),
+      "utf-8",
+    );
+  } catch {
+    /* ignore */
+  }
   return count;
 }
 

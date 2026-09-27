@@ -67,3 +67,9 @@ fixtures/**/*.db
 # 恢复会话导出（含服务器账号/密钥等敏感信息，严禁入库）
 恢复会话_*.md
 recovery-session-*.md
+
+# pack temp files
+apps/desktop/package.json.keep
+apps/desktop/package.json.orig
+apps/desktop/package.json.devbackup
+apps/desktop/electron-builder.json

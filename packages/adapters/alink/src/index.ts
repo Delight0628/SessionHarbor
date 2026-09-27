@@ -16,6 +16,7 @@ import {
   msToAlinkStr,
   openRo,
   openRw,
+  claudeCwdEncode,
   type Adapter,
   type ClientPathsLike,
   type HarborIR,
@@ -280,6 +281,29 @@ export class AlinkAdapter implements Adapter {
         .prepare(`SELECT 1 FROM alink_session WHERE sessionId = ?`)
         .get(sessionId);
       if (existing && !opts?.overwrite) {
+        // 若缺少 Claude Code 转录则补写，避免 resume 时报 No conversation found
+        let ccPath: string | undefined;
+        try {
+          const home = process.env.USERPROFILE || process.env.HOME || "";
+          const enc = claudeCwdEncode(s.cwd || "");
+          const want = path.join(home, ".claude", "projects", enc, `${sessionId}.jsonl`);
+          if (!fs.existsSync(want) || fs.statSync(want).size === 0) {
+            ccPath = writeClaudeCodeTranscript(ir, sessionId);
+            return {
+              status: "ok",
+              sessionId,
+              messageCount: 0,
+              targetPath: want,
+              detail: {
+                repaired: true,
+                claudeCodePath: ccPath,
+                note: "已补写 Claude Code 转录供 resume",
+              },
+            };
+          }
+        } catch {
+          /* fallthrough */
+        }
         return {
           status: "skipped",
           sessionId,
@@ -341,9 +365,10 @@ export class AlinkAdapter implements Adapter {
       }
       db.exec(`COMMIT`);
 
-      // JSONL
+      // JSONL（领慧 UI 展示格式）+ Claude Code 转录（resume 必需）
       let jsonlCount = 0;
       let jsonlPath: string | undefined;
+      let ccPath: string | undefined;
       if (p.jsonlDir) {
         fs.mkdirSync(p.jsonlDir, { recursive: true });
         jsonlPath = path.join(p.jsonlDir, `${sessionId}.jsonl`);
@@ -353,13 +378,37 @@ export class AlinkAdapter implements Adapter {
           jsonlCount = writeJsonl(jsonlPath, ir, sessionId);
         }
       }
+      // 双写 ~/.claude/projects/<cwd编码>/<sessionId>.jsonl
+      // 领慧 agentEngine=claude 时用 Claude Code 转录 resume，否则报
+      // "No conversation found with session ID"
+      try {
+        ccPath = writeClaudeCodeTranscript(ir, sessionId);
+      } catch (e) {
+        return {
+          status: "ok",
+          sessionId,
+          messageCount: jsonlCount || legacyCount,
+          targetPath: jsonlPath,
+          detail: {
+            legacySessionId: legacySid,
+            messagesSql: legacyCount,
+            messagesJsonl: jsonlCount,
+            warning: `Claude Code 转录写入失败: ${e instanceof Error ? e.message : e}`,
+          },
+        };
+      }
 
       return {
         status: "ok",
         sessionId,
         messageCount: jsonlCount || legacyCount,
         targetPath: jsonlPath,
-        detail: { legacySessionId: legacySid, messagesSql: legacyCount, messagesJsonl: jsonlCount },
+        detail: {
+          legacySessionId: legacySid,
+          messagesSql: legacyCount,
+          messagesJsonl: jsonlCount,
+          claudeCodePath: ccPath,
+        },
       };
     } catch (e) {
       try {
@@ -397,6 +446,152 @@ function ensureLegacySession(
     )
     .run(title, createdS, updatedS, model || "", userId);
   return Number(info.lastInsertRowid);
+}
+
+/** 写 Claude Code 原生转录，供领慧 claude 引擎 resume */
+function writeClaudeCodeTranscript(ir: HarborIR, sessionId: string): string {
+  const s = ir.header.session;
+  const cwd = s.cwd || process.cwd();
+  const home = process.env.USERPROFILE || process.env.HOME || "";
+  const enc = claudeCwdEncode(cwd);
+  const dir = path.join(home, ".claude", "projects", enc);
+  fs.mkdirSync(dir, { recursive: true });
+  const filePath = path.join(dir, `${sessionId}.jsonl`);
+  const createdMs = s.createdAt ? Date.parse(s.createdAt) : Date.now();
+  const lines: string[] = [];
+  let parentUuid: string | null = null;
+  for (const item of ir.items) {
+    const itemTs =
+      "timestamp" in item && item.timestamp ? item.timestamp : new Date(createdMs).toISOString();
+    if (item.type === "message") {
+      const text = item.content
+        .map((b) => (b.type === "text" ? b.text : ""))
+        .filter(Boolean)
+        .join("\n");
+      if (!text.trim()) continue;
+      const uuid = randomUUID();
+      if (item.role === "user") {
+        lines.push(
+          JSON.stringify({
+            parentUuid,
+            isSidechain: false,
+            promptId: `prompt_${uuid.replace(/-/g, "").slice(0, 16)}`,
+            type: "user",
+            message: { role: "user", content: text },
+            uuid,
+            timestamp: itemTs,
+            userType: "external",
+            cwd,
+            sessionId,
+            version: "sessionharbor-0.1",
+            gitBranch: s.gitBranch ?? null,
+          }),
+        );
+      } else if (item.role === "assistant") {
+        lines.push(
+          JSON.stringify({
+            parentUuid,
+            isSidechain: false,
+            type: "assistant",
+            message: {
+              id: `msg_${uuid.replace(/-/g, "").slice(0, 24)}`,
+              type: "message",
+              role: "assistant",
+              model: item.model || s.model || "migrated",
+              content: [{ type: "text", text }],
+            },
+            uuid,
+            timestamp: itemTs,
+            cwd,
+            sessionId,
+            version: "sessionharbor-0.1",
+          }),
+        );
+      } else {
+        continue;
+      }
+      parentUuid = uuid;
+    } else if (item.type === "thinking") {
+      const uuid = randomUUID();
+      lines.push(
+        JSON.stringify({
+          parentUuid,
+          isSidechain: false,
+          type: "assistant",
+          message: {
+            id: `msg_${uuid.replace(/-/g, "").slice(0, 24)}`,
+            type: "message",
+            role: "assistant",
+            model: s.model || "migrated",
+            content: [{ type: "thinking", thinking: item.text }],
+          },
+          uuid,
+          timestamp: itemTs,
+          cwd,
+          sessionId,
+          version: "sessionharbor-0.1",
+        }),
+      );
+      parentUuid = uuid;
+    } else if (item.type === "tool_call") {
+      const uuid = randomUUID();
+      lines.push(
+        JSON.stringify({
+          parentUuid,
+          isSidechain: false,
+          type: "assistant",
+          message: {
+            id: `msg_${uuid.replace(/-/g, "").slice(0, 24)}`,
+            type: "message",
+            role: "assistant",
+            model: s.model || "migrated",
+            content: [
+              {
+                type: "tool_use",
+                id: item.callId,
+                name: item.toolName,
+                input: item.input,
+              },
+            ],
+          },
+          uuid,
+          timestamp: itemTs,
+          cwd,
+          sessionId,
+          version: "sessionharbor-0.1",
+        }),
+      );
+      parentUuid = uuid;
+    } else if (item.type === "tool_output") {
+      const uuid = randomUUID();
+      lines.push(
+        JSON.stringify({
+          parentUuid,
+          isSidechain: false,
+          type: "user",
+          message: {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: item.callId,
+                content: item.output || "",
+                is_error: Boolean(item.isError),
+              },
+            ],
+          },
+          uuid,
+          timestamp: itemTs,
+          cwd,
+          sessionId,
+          version: "sessionharbor-0.1",
+        }),
+      );
+      parentUuid = uuid;
+    }
+  }
+  fs.writeFileSync(filePath, lines.join("\n") + (lines.length ? "\n" : ""), "utf-8");
+  return filePath;
 }
 
 function writeJsonl(filePath: string, ir: HarborIR, sessionId: string): number {

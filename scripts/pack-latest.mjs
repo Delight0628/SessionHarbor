@@ -83,8 +83,13 @@ console.log("version", version);
 console.log("electronDist", electronDist);
 console.log("eb", eb);
 
+const nodeBin =
+  process.env.HARBOR_NODE ||
+  (process.execPath && /node\.exe$/i.test(process.execPath) ? process.execPath : "") ||
+  "C:/Program Files/nodejs/node.exe";
+
 const r = spawnSync(
-  process.execPath,
+  nodeBin,
   [eb, "--win", "portable", "--config", cfgPath, "--publish", "never"],
   { cwd: DESKTOP, stdio: "inherit", env: { ...process.env, ELECTRON_SKIP_BINARY_DOWNLOAD: "1" } },
 );

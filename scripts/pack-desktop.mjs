@@ -146,13 +146,7 @@ async function main() {
     "@sessionharbor/desktop",
   ];
   for (const f of filters) {
-    try {
-      run("pnpm", ["--filter", f, "build"]);
-    } catch (e) {
-      // 单包失败不应让三平台打包全部中断（如个别 adapter）
-      console.error(`[warn] filter ${f} build failed:`, e.message || e);
-      if (f === "@sessionharbor/core" || f === "@sessionharbor/desktop") throw e;
-    }
+    run("pnpm", ["--filter", f, "build"]);
   }
 
   const mainBundle = path.join(DESKTOP, "dist", "main.cjs");

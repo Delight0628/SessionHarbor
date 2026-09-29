@@ -17,6 +17,7 @@ import {
   openRo,
   openRw,
   claudeCwdEncode,
+  stripReminders,
   type Adapter,
   type ClientPathsLike,
   type HarborIR,
@@ -464,10 +465,11 @@ function writeClaudeCodeTranscript(ir: HarborIR, sessionId: string): string {
     const itemTs =
       "timestamp" in item && item.timestamp ? item.timestamp : new Date(createdMs).toISOString();
     if (item.type === "message") {
-      const text = item.content
+      let text = item.content
         .map((b) => (b.type === "text" ? b.text : ""))
         .filter(Boolean)
         .join("\n");
+      if (item.role === "user") text = stripReminders(text);
       if (!text.trim()) continue;
       const uuid = randomUUID();
       if (item.role === "user") {
@@ -680,15 +682,21 @@ function writeJsonl(filePath: string, ir: HarborIR, sessionId: string): number {
     const ts = isoZ(itemTs || createdMs);
 
     if (item.type === "message") {
-      const text = item.content
+      let text = item.content
         .map((b) => (b.type === "text" ? b.text : ""))
         .filter(Boolean)
         .join("\n");
+      if (item.role === "user") {
+        // 剥离 system-reminder / git status 注入，避免出现在领慧对话流
+        text = stripReminders(text)
+          .replace(/^There are uncommitted git changes in this session workspace\.[\s\S]*?(?=\n\n|$)/i, "")
+          .trim();
+      }
       if (!text) continue;
 
       if (item.role === "user") {
         if (current) flushResult(current);
-        const cmid = randomUUID();
+                const cmid = randomUUID();
         current = {
           clientMessageId: cmid,
           promptLineIndex: lines.length,

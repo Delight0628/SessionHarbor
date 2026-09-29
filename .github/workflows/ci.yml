@@ -27,6 +27,7 @@ jobs:
 
       - name: Build
         run: |
+          set -euxo pipefail
           pnpm --filter @sessionharbor/core build
           pnpm --filter "@sessionharbor/adapter-*" build
           pnpm --filter @sessionharbor/cli build

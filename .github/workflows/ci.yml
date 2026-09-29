@@ -15,7 +15,6 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         # 版本与根 package.json 的 packageManager 保持一致（pnpm@11.15.1）
-        # 勿在此写死与 packageManager 冲突的 version，否则 CI 报 Multiple versions of pnpm specified
 
       - uses: actions/setup-node@v4
         with:
@@ -26,6 +25,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build
+        shell: bash
         run: |
           set -euxo pipefail
           pnpm --filter @sessionharbor/core build

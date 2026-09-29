@@ -197,6 +197,40 @@ export class TraeSoloAdapter implements Adapter {
     return (this.paths ?? this.discover()) as TraePaths;
   }
 
+  private loadWorkspaceAux(db: ReturnType<typeof openRo>): {
+    inputHistory: Array<{ inputText?: string }>;
+    completionBySid: Map<string, Array<{ text?: string }>>;
+  } {
+    let inputHistory: Array<{ inputText?: string }> = [];
+    const completionBySid = new Map<string, Array<{ text?: string }>>();
+    try {
+      const hist = db
+        .prepare(`SELECT value FROM ItemTable WHERE key = 'icube-ai-agent-storage-input-history'`)
+        .get() as { value?: unknown } | undefined;
+      if (hist?.value != null) {
+        const arr = decodeValue(hist.value);
+        if (Array.isArray(arr)) inputHistory = arr as Array<{ inputText?: string }>;
+      }
+      const rows = db
+        .prepare(`SELECT key, value FROM ItemTable WHERE key LIKE 'ai-chat.chatQueryCompletion%'`)
+        .all() as Array<{ key: string; value: unknown }>;
+      for (const r of rows) {
+        const m = /chatQueryCompletion\.[^.]+"?\.?v?2?\.?([0-9a-f]{16,})/i.exec(r.key);
+        const sid = m?.[1] || r.key.split(".").pop() || "";
+        const d = decodeValue(r.value) as Json | undefined;
+        const result = d?.response && typeof d.response === "object"
+          ? ((d.response as Json).result as Array<{ text?: string }> | undefined)
+          : undefined;
+        if (sid && Array.isArray(result)) {
+          completionBySid.set(sid, result);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return { inputHistory, completionBySid };
+  }
+
   private loadWorkspaceSessions(wsDir: string): TraeSessionRecord[] {
     const dbPath = path.join(wsDir, "state.vscdb");
     if (!fs.existsSync(dbPath)) return [];
@@ -215,44 +249,70 @@ export class TraeSoloAdapter implements Adapter {
     }
     const out: TraeSessionRecord[] = [];
     try {
+      const { inputHistory, completionBySid } = this.loadWorkspaceAux(db);
       const row = db
         .prepare(`SELECT value FROM ItemTable WHERE key = 'memento/icube-ai-agent-storage'`)
         .get() as { value?: unknown } | undefined;
-      if (row?.value == null) return out;
-      const d = decodeValue(row.value) as Json | undefined;
+      const d = row?.value != null ? (decodeValue(row.value) as Json | undefined) : undefined;
       const list = (d?.list ?? []) as TraeSessionRecord[];
       for (const s of list) {
         if (!s?.sessionId) continue;
+        let messages = [...(s.messages ?? [])];
+        // messages 为空时，用 input-history + chatQueryCompletion 拼出可用对话
+        if (!messages.length) {
+          const completions = completionBySid.get(s.sessionId) ?? [];
+          const hist = inputHistory
+            .map((x) => x?.inputText)
+            .filter((t): t is string => !!t && !!t.trim());
+          const n = Math.max(hist.length, completions.length);
+          for (let i = 0; i < n; i++) {
+            if (hist[i]) messages.push({ role: "user", content: hist[i] });
+            const c = completions[i]?.text;
+            if (c) messages.push({ role: "assistant", content: c });
+          }
+          if (!messages.length && s.title) {
+            messages.push({ role: "user", content: s.title });
+          }
+        }
+        // 标题：优先 session 自己的 completion，再回落 input-history
+        let title = s.title;
+        if (!title || !title.trim()) {
+          const completions = completionBySid.get(s.sessionId) ?? [];
+          const t = completions.find((x) => x?.text)?.text;
+          if (t) title = t.slice(0, 80).replace(/\s+/g, " ");
+        }
+        if (!title || !title.trim()) {
+          const firstUser = messages.find(
+            (m) => m.role === "user" && (typeof m.content === "string" ? m.content.trim() : ""),
+          );
+          if (firstUser && typeof firstUser.content === "string") {
+            title = firstUser.content.slice(0, 80).replace(/\s+/g, " ");
+          }
+        }
         out.push({
           ...s,
+          title: title || s.sessionId,
+          messages,
           cwd,
           brand: brandFromPath(),
           wsDir,
         });
       }
-      // 补充：input-history 里有标题但 storage 空时，用历史提示词作标题
+      // 完全没有 session 记录时，用 input-history 造一条
       if (!out.length) {
-        const hist = db
-          .prepare(`SELECT value FROM ItemTable WHERE key = 'icube-ai-agent-storage-input-history'`)
-          .get() as { value?: unknown } | undefined;
-        if (hist?.value != null) {
-          const arr = decodeValue(hist.value) as Array<{ inputText?: string }> | undefined;
-          if (Array.isArray(arr) && arr.length) {
-            const first = arr.find((x) => x?.inputText)?.inputText;
-            if (first) {
-              out.push({
-                sessionId: `history-${path.basename(wsDir)}`,
-                title: first.slice(0, 120),
-                messages: arr.map((x) => ({
-                  role: "user",
-                  content: x.inputText ?? "",
-                })),
-                cwd,
-                brand: brandFromPath(),
-                wsDir,
-              });
-            }
-          }
+        const first = inputHistory.find((x) => x?.inputText)?.inputText;
+        if (first) {
+          out.push({
+            sessionId: `history-${path.basename(wsDir)}`,
+            title: first.slice(0, 120),
+            messages: inputHistory
+              .map((x) => x?.inputText)
+              .filter((t): t is string => !!t && !!t.trim())
+              .map((t) => ({ role: "user" as const, content: t })),
+            cwd,
+            brand: brandFromPath(),
+            wsDir,
+          });
         }
       }
     } catch {

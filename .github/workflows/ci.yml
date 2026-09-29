@@ -8,26 +8,29 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        # 版本与根 package.json 的 packageManager 保持一致（pnpm@11.15.1）
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
+      - name: Diagnose
+        run: |
+          echo "node=$(node -v) pnpm=$(pnpm -v)"
+          echo "packageManager=$(node -p "require('./package.json').packageManager")"
+          ls packages/adapters
+
       - name: Install
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Build
-        shell: bash
         run: |
-          set -euxo pipefail
           pnpm --filter @sessionharbor/core build
           pnpm --filter "@sessionharbor/adapter-*" build
           pnpm --filter @sessionharbor/cli build

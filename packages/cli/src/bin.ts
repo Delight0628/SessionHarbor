@@ -44,10 +44,10 @@ import { createClaudeCodeAdapter } from "@sessionharbor/adapter-claude-code";
 import { createWorkbuddyAdapter } from "@sessionharbor/adapter-workbuddy";
 import { createCodexAdapter, discoverCodex } from "@sessionharbor/adapter-codex";
 import { createMimoAdapter, discoverMimo } from "@sessionharbor/adapter-mimo";
+import { createDeepseekHarnessAdapter, discoverDsh } from "@sessionharbor/adapter-deepseek-harness";
 import { createCursorAdapter, discoverCursor } from "@sessionharbor/adapter-cursor";
 import { createVsCodeAdapter, discoverVsCode } from "@sessionharbor/adapter-vscode";
 import { createHermesAdapter, discoverHermes } from "@sessionharbor/adapter-hermes";
-import { createOpenClawAdapter, discoverOpenClaw } from "@sessionharbor/adapter-openclaw";
 import {
   createChatGptExportAdapter,
   discoverChatGptExport,
@@ -59,10 +59,10 @@ const CLIENTS = [
   "workbuddy",
   "codex",
   "mimo",
+  "deepseek-harness",
         "cursor",
   "vscode",
   "hermes",
-  "openclaw",
   "chatgpt-export",
 ] as const;
 type ClientId = (typeof CLIENTS)[number];
@@ -118,6 +118,8 @@ function getClientPaths(
       return discoverCodex(args["codex-root"] as string | undefined);
     case "mimo":
       return discoverMimo(args["mimo-db"] as string | undefined);
+    case "deepseek-harness":
+      return discoverDsh(args["dsh-root"] as string | undefined);
     case "cursor":
       return discoverCursor(args["cursor-root"] as string | undefined);
     case "vscode":
@@ -140,10 +142,10 @@ function getAdapter(
   if (id === "claude-code") return createClaudeCodeAdapter(paths);
   if (id === "codex") return createCodexAdapter(paths as never);
   if (id === "mimo") return createMimoAdapter(paths);
+  if (id === "deepseek-harness") return createDeepseekHarnessAdapter(paths as never);
   if (id === "cursor") return createCursorAdapter(paths as never);
   if (id === "vscode") return createVsCodeAdapter(paths as never);
   if (id === "hermes") return createHermesAdapter(paths as never);
-  if (id === "openclaw") return createOpenClawAdapter(paths as never);
   if (id === "chatgpt-export") return createChatGptExportAdapter(paths as never);
   return createWorkbuddyAdapter(paths);
 }
@@ -171,7 +173,7 @@ function help(): void {
 
 用法:
   harbor info
-  harbor list --client alink|claude-code|workbuddy|codex|mimo|cursor|vscode|hermes|openclaw|chatgpt-export [--json] [--title 关键字]
+  harbor list --client alink|claude-code|workbuddy|codex|mimo|deepseek-harness|cursor|vscode|hermes|chatgpt-export [--json] [--title 关键字]
   harbor scan [--client ...]          构建/刷新本地 FTS 索引
   harbor search <关键词> [--limit N]   统一全文检索
   harbor migrate --from A --to B [--title ...] [--id ...] [--dry-run] [--overwrite] [--yes]

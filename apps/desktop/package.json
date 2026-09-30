@@ -16,10 +16,10 @@
     "@sessionharbor/adapter-cursor": "workspace:*",
     "@sessionharbor/adapter-hermes": "workspace:*",
     "@sessionharbor/adapter-mimo": "workspace:*",
-    "@sessionharbor/adapter-openclaw": "workspace:*",
     "@sessionharbor/adapter-vscode": "workspace:*",
     "@sessionharbor/adapter-workbuddy": "workspace:*",
-    "@sessionharbor/core": "workspace:*"
+    "@sessionharbor/core": "workspace:*",
+    "@sessionharbor/adapter-deepseek-harness": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

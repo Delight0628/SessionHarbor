@@ -153,6 +153,7 @@ function clientColor(id) {
     "claude-code": "#d2a8ff",
     workbuddy: "#7ee7a8",
     codex: "#e6b84d",
+    "deepseek-harness": "#4db6ff",
     mimo: "#ff8f6b",
     cursor: "#9ecbff",
     vscode: "#4aa8ff",

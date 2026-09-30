@@ -32,10 +32,10 @@ import { createClaudeCodeAdapter } from "@sessionharbor/adapter-claude-code";
 import { createWorkbuddyAdapter } from "@sessionharbor/adapter-workbuddy";
 import { createCodexAdapter, discoverCodex } from "@sessionharbor/adapter-codex";
 import { createMimoAdapter, discoverMimo } from "@sessionharbor/adapter-mimo";
+import { createDeepseekHarnessAdapter, discoverDsh } from "@sessionharbor/adapter-deepseek-harness";
 import { createCursorAdapter, discoverCursor } from "@sessionharbor/adapter-cursor";
 import { createVsCodeAdapter, discoverVsCode } from "@sessionharbor/adapter-vscode";
 import { createHermesAdapter, discoverHermes } from "@sessionharbor/adapter-hermes";
-import { createOpenClawAdapter, discoverOpenClaw } from "@sessionharbor/adapter-openclaw";
 import {
   createChatGptExportAdapter,
   discoverChatGptExport,
@@ -239,10 +239,10 @@ type ClientId =
   | "workbuddy"
   | "codex"
   | "mimo"
+  | "deepseek-harness"
   | "cursor"
   | "vscode"
   | "hermes"
-  | "openclaw"
   | "chatgpt-export";
 const CLIENTS: ClientId[] = [
   "alink",
@@ -250,10 +250,10 @@ const CLIENTS: ClientId[] = [
   "workbuddy",
   "codex",
   "mimo",
+  "deepseek-harness",
         "cursor",
   "vscode",
   "hermes",
-  "openclaw",
   "chatgpt-export",
 ];
 
@@ -268,6 +268,7 @@ const CLIENT_META: Array<{
   { id: "workbuddy", displayName: "WorkBuddy", discover: () => discoverWorkbuddy() },
   { id: "codex", displayName: "Codex", discover: () => discoverCodex() },
   { id: "mimo", displayName: "MiMo Desktop", discover: () => discoverMimo() },
+  { id: "deepseek-harness", displayName: "DeepSeek Harness", discover: () => discoverDsh() },
   {
     id: "cursor",
     displayName: "Cursor",
@@ -356,14 +357,14 @@ function getAdapter(id: ClientId) {
       return createCodexAdapter(paths as never);
     case "mimo":
       return createMimoAdapter(paths);
+    case "deepseek-harness":
+      return createDeepseekHarnessAdapter(paths as never);
     case "cursor":
       return createCursorAdapter(paths as never);
     case "vscode":
       return createVsCodeAdapter(paths as never);
     case "hermes":
       return createHermesAdapter(paths as never);
-    case "openclaw":
-      return createOpenClawAdapter(paths as never);
     case "chatgpt-export":
       return createChatGptExportAdapter(paths as never);
   }

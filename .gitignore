@@ -73,3 +73,5 @@ apps/desktop/package.json.keep
 apps/desktop/package.json.orig
 apps/desktop/package.json.devbackup
 apps/desktop/electron-builder.json
+
+vendor-sqlcipher/

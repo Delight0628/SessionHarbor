@@ -154,9 +154,6 @@ function clientColor(id) {
     workbuddy: "#7ee7a8",
     codex: "#e6b84d",
     mimo: "#ff8f6b",
-    "deepseek-harness": "#6eb6ff",
-    devin: "#f0a0c8",
-    "trae-solo": "#5ad4a0",
     cursor: "#9ecbff",
     vscode: "#4aa8ff",
     hermes: "#f0c14a",
@@ -504,7 +501,7 @@ async function refreshClients() {
       })
       .join("");
 
-    // 源下拉：本机已检测到的客户端全部可选（含只读如 Trae）
+    // 源下拉：本机已检测到的客户端全部可选
     const readInstalled = list.filter((c) => c.installed ?? c.ok);
     const writable = readInstalled.filter((c) => c.canWrite !== false);
     const src = $("#client");
@@ -519,9 +516,6 @@ async function refreshClients() {
     if ([...src.options].some((o) => o.value === prevSrc)) src.value = prevSrc;
 
     const dstList = [...writable];
-    if (readInstalled.some((c) => c.id === "trae-solo") && !dstList.some((c) => c.id === "trae-solo")) {
-      dstList.push({ id: "trae-solo", displayName: "Trae（只读迁出）", canWrite: false });
-    }
     dst.innerHTML =
       '<option value="">迁移到…</option>' +
       (dstList.length

@@ -44,12 +44,6 @@ import { createClaudeCodeAdapter } from "@sessionharbor/adapter-claude-code";
 import { createWorkbuddyAdapter } from "@sessionharbor/adapter-workbuddy";
 import { createCodexAdapter, discoverCodex } from "@sessionharbor/adapter-codex";
 import { createMimoAdapter, discoverMimo } from "@sessionharbor/adapter-mimo";
-import {
-  createDeepseekHarnessAdapter,
-  discoverDsh,
-} from "@sessionharbor/adapter-deepseek-harness";
-import { createDevinAdapter, discoverDevin } from "@sessionharbor/adapter-devin";
-import { createTraeSoloAdapter, discoverTrae } from "@sessionharbor/adapter-trae-solo";
 import { createCursorAdapter, discoverCursor } from "@sessionharbor/adapter-cursor";
 import { createVsCodeAdapter, discoverVsCode } from "@sessionharbor/adapter-vscode";
 import { createHermesAdapter, discoverHermes } from "@sessionharbor/adapter-hermes";
@@ -65,10 +59,7 @@ const CLIENTS = [
   "workbuddy",
   "codex",
   "mimo",
-  "deepseek-harness",
-  "devin",
-  "trae-solo",
-  "cursor",
+        "cursor",
   "vscode",
   "hermes",
   "openclaw",
@@ -127,12 +118,6 @@ function getClientPaths(
       return discoverCodex(args["codex-root"] as string | undefined);
     case "mimo":
       return discoverMimo(args["mimo-db"] as string | undefined);
-    case "deepseek-harness":
-      return discoverDsh(args["dsh-root"] as string | undefined);
-    case "devin":
-      return discoverDevin(args["devin-db"] as string | undefined);
-    case "trae-solo":
-      return discoverTrae(args["trae-root"] as string | undefined);
     case "cursor":
       return discoverCursor(args["cursor-root"] as string | undefined);
     case "vscode":
@@ -155,9 +140,6 @@ function getAdapter(
   if (id === "claude-code") return createClaudeCodeAdapter(paths);
   if (id === "codex") return createCodexAdapter(paths as never);
   if (id === "mimo") return createMimoAdapter(paths);
-  if (id === "deepseek-harness") return createDeepseekHarnessAdapter(paths as never);
-  if (id === "devin") return createDevinAdapter(paths as never);
-  if (id === "trae-solo") return createTraeSoloAdapter(paths as never);
   if (id === "cursor") return createCursorAdapter(paths as never);
   if (id === "vscode") return createVsCodeAdapter(paths as never);
   if (id === "hermes") return createHermesAdapter(paths as never);
@@ -189,7 +171,7 @@ function help(): void {
 
 用法:
   harbor info
-  harbor list --client alink|claude-code|workbuddy|codex|mimo|cursor|vscode|trae-solo|hermes|openclaw|chatgpt-export [--json] [--title 关键字]
+  harbor list --client alink|claude-code|workbuddy|codex|mimo|cursor|vscode|hermes|openclaw|chatgpt-export [--json] [--title 关键字]
   harbor scan [--client ...]          构建/刷新本地 FTS 索引
   harbor search <关键词> [--limit N]   统一全文检索
   harbor migrate --from A --to B [--title ...] [--id ...] [--dry-run] [--overwrite] [--yes]
@@ -220,7 +202,6 @@ function help(): void {
   --codex-root PATH   指定 ~/.codex
   --cursor-root PATH  指定 Cursor 数据根（%APPDATA%/Cursor）
   --vscode-root PATH  指定 VS Code 数据根（%APPDATA%/Code）
-  --trae-root PATH    指定 Trae 数据根
   --hermes-root PATH  指定 Hermes 数据根（~/.hermes）
   --openclaw-root PATH 指定 OpenClaw 数据根（~/.openclaw）
   --chatgpt-export    conversations.json 路径（只读导入）

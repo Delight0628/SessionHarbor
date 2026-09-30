@@ -32,12 +32,6 @@ import { createClaudeCodeAdapter } from "@sessionharbor/adapter-claude-code";
 import { createWorkbuddyAdapter } from "@sessionharbor/adapter-workbuddy";
 import { createCodexAdapter, discoverCodex } from "@sessionharbor/adapter-codex";
 import { createMimoAdapter, discoverMimo } from "@sessionharbor/adapter-mimo";
-import {
-  createDeepseekHarnessAdapter,
-  discoverDsh,
-} from "@sessionharbor/adapter-deepseek-harness";
-import { createDevinAdapter, discoverDevin } from "@sessionharbor/adapter-devin";
-import { createTraeSoloAdapter, discoverTrae } from "@sessionharbor/adapter-trae-solo";
 import { createCursorAdapter, discoverCursor } from "@sessionharbor/adapter-cursor";
 import { createVsCodeAdapter, discoverVsCode } from "@sessionharbor/adapter-vscode";
 import { createHermesAdapter, discoverHermes } from "@sessionharbor/adapter-hermes";
@@ -245,9 +239,6 @@ type ClientId =
   | "workbuddy"
   | "codex"
   | "mimo"
-  | "deepseek-harness"
-  | "devin"
-  | "trae-solo"
   | "cursor"
   | "vscode"
   | "hermes"
@@ -259,10 +250,7 @@ const CLIENTS: ClientId[] = [
   "workbuddy",
   "codex",
   "mimo",
-  "deepseek-harness",
-  "devin",
-  "trae-solo",
-  "cursor",
+        "cursor",
   "vscode",
   "hermes",
   "openclaw",
@@ -280,24 +268,6 @@ const CLIENT_META: Array<{
   { id: "workbuddy", displayName: "WorkBuddy", discover: () => discoverWorkbuddy() },
   { id: "codex", displayName: "Codex", discover: () => discoverCodex() },
   { id: "mimo", displayName: "MiMo Desktop", discover: () => discoverMimo() },
-  {
-    id: "deepseek-harness",
-    displayName: "DeepSeek Harness",
-    discover: () => discoverDsh(),
-    canWrite: false,
-  },
-  {
-    id: "devin",
-    displayName: "Devin",
-    discover: () => discoverDevin(),
-    canWrite: false,
-  },
-  {
-    id: "trae-solo",
-    displayName: "Trae",
-    discover: () => discoverTrae(),
-    canWrite: false,
-  },
   {
     id: "cursor",
     displayName: "Cursor",
@@ -386,12 +356,6 @@ function getAdapter(id: ClientId) {
       return createCodexAdapter(paths as never);
     case "mimo":
       return createMimoAdapter(paths);
-    case "deepseek-harness":
-      return createDeepseekHarnessAdapter(paths as never);
-    case "devin":
-      return createDevinAdapter(paths as never);
-    case "trae-solo":
-      return createTraeSoloAdapter(paths as never);
     case "cursor":
       return createCursorAdapter(paths as never);
     case "vscode":

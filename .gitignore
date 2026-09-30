@@ -75,3 +75,4 @@ apps/desktop/package.json.devbackup
 apps/desktop/electron-builder.json
 
 vendor-sqlcipher/
+scripts/trae-keys.txt

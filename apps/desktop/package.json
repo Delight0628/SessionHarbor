@@ -19,7 +19,8 @@
     "@sessionharbor/adapter-vscode": "workspace:*",
     "@sessionharbor/adapter-workbuddy": "workspace:*",
     "@sessionharbor/core": "workspace:*",
-    "@sessionharbor/adapter-deepseek-harness": "workspace:*"
+    "@sessionharbor/adapter-deepseek-harness": "workspace:*",
+    "@sessionharbor/adapter-openclaw": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

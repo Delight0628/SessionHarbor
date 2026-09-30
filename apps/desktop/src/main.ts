@@ -33,6 +33,8 @@ import { createWorkbuddyAdapter } from "@sessionharbor/adapter-workbuddy";
 import { createCodexAdapter, discoverCodex } from "@sessionharbor/adapter-codex";
 import { createMimoAdapter, discoverMimo } from "@sessionharbor/adapter-mimo";
 import { createDeepseekHarnessAdapter, discoverDsh } from "@sessionharbor/adapter-deepseek-harness";
+// @ts-ignore
+import { createOpenClawAdapter, discoverOpenClaw } from "@sessionharbor/adapter-openclaw";
 import { createCursorAdapter, discoverCursor } from "@sessionharbor/adapter-cursor";
 import { createVsCodeAdapter, discoverVsCode } from "@sessionharbor/adapter-vscode";
 import { createHermesAdapter, discoverHermes } from "@sessionharbor/adapter-hermes";
@@ -240,6 +242,7 @@ type ClientId =
   | "codex"
   | "mimo"
   | "deepseek-harness"
+  | "openclaw"
   | "cursor"
   | "vscode"
   | "hermes"
@@ -251,6 +254,7 @@ const CLIENTS: ClientId[] = [
   "codex",
   "mimo",
   "deepseek-harness",
+  "openclaw",
         "cursor",
   "vscode",
   "hermes",
@@ -269,6 +273,7 @@ const CLIENT_META: Array<{
   { id: "codex", displayName: "Codex", discover: () => discoverCodex() },
   { id: "mimo", displayName: "MiMo Desktop", discover: () => discoverMimo() },
   { id: "deepseek-harness", displayName: "DeepSeek Harness", discover: () => discoverDsh() },
+  { id: "openclaw", displayName: "OpenClaw", discover: () => discoverOpenClaw(), canWrite: false },
   {
     id: "cursor",
     displayName: "Cursor",
@@ -359,6 +364,8 @@ function getAdapter(id: ClientId) {
       return createMimoAdapter(paths);
     case "deepseek-harness":
       return createDeepseekHarnessAdapter(paths as never);
+    case "openclaw":
+      return createOpenClawAdapter(paths as never);
     case "cursor":
       return createCursorAdapter(paths as never);
     case "vscode":

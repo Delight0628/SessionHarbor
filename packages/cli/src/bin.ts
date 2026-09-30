@@ -126,8 +126,6 @@ function getClientPaths(
       return discoverVsCode(args["vscode-root"] as string | undefined);
     case "hermes":
       return discoverHermes(args["hermes-root"] as string | undefined);
-    case "openclaw":
-      return discoverOpenClaw(args["openclaw-root"] as string | undefined);
     case "chatgpt-export":
       return discoverChatGptExport(args["chatgpt-export"] as string | undefined);
   }

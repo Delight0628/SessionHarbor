@@ -504,9 +504,9 @@ async function refreshClients() {
       })
       .join("");
 
-    // 下拉框：只保留本机已检测到的客户端（未安装不得出现）
-    const installed = list.filter((c) => (c.installed ?? c.ok) && c.canWrite !== false);
+    // 源下拉：本机已检测到的客户端全部可选（含只读如 Trae）
     const readInstalled = list.filter((c) => c.installed ?? c.ok);
+    const writable = readInstalled.filter((c) => c.canWrite !== false);
     const src = $("#client");
     const dst = $("#migrateTo");
     const prevSrc = src.value;
@@ -518,10 +518,14 @@ async function refreshClients() {
       : '<option value="">（未检测到客户端）</option>';
     if ([...src.options].some((o) => o.value === prevSrc)) src.value = prevSrc;
 
+    const dstList = [...writable];
+    if (readInstalled.some((c) => c.id === "trae-solo") && !dstList.some((c) => c.id === "trae-solo")) {
+      dstList.push({ id: "trae-solo", displayName: "Trae（只读迁出）", canWrite: false });
+    }
     dst.innerHTML =
       '<option value="">迁移到…</option>' +
-      (installed.length
-        ? installed
+      (dstList.length
+        ? dstList
             .map((c) => `<option value="${c.id}">${escapeHtml(c.displayName || c.id)}</option>`)
             .join("")
         : "");

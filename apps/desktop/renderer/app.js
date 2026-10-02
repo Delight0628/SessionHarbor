@@ -161,6 +161,7 @@ function clientColor(id) {
     vscode: "#4aa8ff",
     hermes: "#f0c14a",
     openclaw: "#9adf6e",
+    teleagent: "#57c9b0",
     "chatgpt-export": "#a0b4d0",
   };
   return map[id] || "#3ec6f0";

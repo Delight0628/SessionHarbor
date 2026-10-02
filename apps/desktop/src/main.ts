@@ -43,6 +43,10 @@ import { createVsCodeAdapter, discoverVsCode } from "@sessionharbor/adapter-vsco
 import { createHermesAdapter, discoverHermes } from "@sessionharbor/adapter-hermes";
 import { createOpenClawAdapter, discoverOpenClaw } from "@sessionharbor/adapter-openclaw";
 import {
+  createTeleagentAdapter,
+  discoverTeleagent,
+} from "@sessionharbor/adapter-teleagent";
+import {
   createChatGptExportAdapter,
   discoverChatGptExport,
 } from "@sessionharbor/adapter-chatgpt-export";
@@ -252,6 +256,7 @@ type ClientId =
   | "vscode"
   | "hermes"
   | "openclaw"
+  | "teleagent"
   | "chatgpt-export";
 const CLIENTS: ClientId[] = [
   "alink",
@@ -266,6 +271,7 @@ const CLIENTS: ClientId[] = [
   "vscode",
   "hermes",
   "openclaw",
+  "teleagent",
   "chatgpt-export",
 ];
 
@@ -320,6 +326,12 @@ const CLIENT_META: Array<{
     id: "openclaw",
     displayName: "OpenClaw",
     discover: () => discoverOpenClaw(),
+    canWrite: false,
+  },
+  {
+    id: "teleagent",
+    displayName: "TeleAgent",
+    discover: () => discoverTeleagent(),
     canWrite: false,
   },
   {
@@ -400,6 +412,8 @@ function getAdapter(id: ClientId) {
       return createHermesAdapter(paths as never);
     case "openclaw":
       return createOpenClawAdapter(paths as never);
+    case "teleagent":
+      return createTeleagentAdapter(paths);
     case "chatgpt-export":
       return createChatGptExportAdapter(paths as never);
   }

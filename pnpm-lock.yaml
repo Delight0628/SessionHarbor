@@ -47,6 +47,12 @@ importers:
       '@sessionharbor/adapter-mimo':
         specifier: workspace:*
         version: link:../../packages/adapters/mimo
+      '@sessionharbor/adapter-openclaw':
+        specifier: workspace:*
+        version: link:../../packages/adapters/openclaw
+      '@sessionharbor/adapter-teleagent':
+        specifier: workspace:*
+        version: link:../../packages/adapters/teleagent
       '@sessionharbor/adapter-trae-solo':
         specifier: workspace:*
         version: link:../../packages/adapters/trae-solo
@@ -187,6 +193,32 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/adapters/openclaw:
+    dependencies:
+      '@sessionharbor/core':
+        specifier: workspace:*
+        version: link:../../core
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.4
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  packages/adapters/teleagent:
+    dependencies:
+      '@sessionharbor/core':
+        specifier: workspace:*
+        version: link:../../core
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.4
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/adapters/trae-solo:
     dependencies:
       '@sessionharbor/core':
@@ -255,6 +287,12 @@ importers:
       '@sessionharbor/adapter-mimo':
         specifier: workspace:*
         version: link:../adapters/mimo
+      '@sessionharbor/adapter-openclaw':
+        specifier: workspace:*
+        version: link:../adapters/openclaw
+      '@sessionharbor/adapter-teleagent':
+        specifier: workspace:*
+        version: link:../adapters/teleagent
       '@sessionharbor/adapter-trae-solo':
         specifier: workspace:*
         version: link:../adapters/trae-solo

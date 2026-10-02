@@ -50,7 +50,7 @@ SessionHarbor is a **local-first** layer that discovers sessions on your machine
 
 ## Supported clients
 
-See the Chinese [README](./README.md#支持的客户端) for the full matrix. Highlights: Claude Code, 领慧 AI, WorkBuddy, Codex, MiMo Desktop, Cursor, VS Code/Trae, Hermes, OpenClaw, ChatGPT export, and more.
+See the Chinese [README](./README.md#支持的客户端) for the full matrix. Highlights: Claude Code, 领慧 AI, WorkBuddy, Codex, MiMo Desktop, TeleAgent, Cursor, VS Code/Trae, Hermes, OpenClaw, ChatGPT export, and more.
 
 ## Quick start
 

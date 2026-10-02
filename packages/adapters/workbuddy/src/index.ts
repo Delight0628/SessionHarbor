@@ -48,6 +48,47 @@ export class WorkbuddyAdapter implements Adapter {
     return this.paths ?? this.discover();
   }
 
+  /** <sessionId> -> 实际所在项目目录，回退查找用（按实例缓存） */
+  private fallbackDirs?: Map<string, string>;
+
+  /**
+   * 定位会话正文文件。
+   *
+   * 首选按 `projectsRoot / wbCwdEncode(cwd) / <id>.jsonl` 推导——这是 WorkBuddy
+   * 的常规布局。但 workbuddy.db 的 cwd 列并非永远与项目目录一致：会话建在 A 盘
+   * 后 cwd 被改写成 B 盘时，目录不会跟着搬，此时推导结果不存在而正文其实还在。
+   * 因此 miss 时回退到按 <id>.jsonl 在 projectsRoot 下建索引查找。
+   */
+  private resolveJsonl(id: string, cwd: string): string | undefined {
+    const p = this.ensure();
+    if (!p.projectsRoot) return undefined;
+    const guessed = path.join(
+      p.projectsRoot,
+      wbCwdEncode(cwd || "D:\\default"),
+      `${id}.jsonl`,
+    );
+    if (fs.existsSync(guessed)) return guessed;
+    if (!this.fallbackDirs) {
+      const m = new Map<string, string>();
+      try {
+        for (const d of fs.readdirSync(p.projectsRoot, { withFileTypes: true })) {
+          if (!d.isDirectory()) continue;
+          const dir = path.join(p.projectsRoot, d.name);
+          for (const f of fs.readdirSync(dir)) {
+            if (!f.endsWith(".jsonl")) continue;
+            const sid = f.slice(0, -".jsonl".length);
+            if (!m.has(sid)) m.set(sid, dir);
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      this.fallbackDirs = m;
+    }
+    const dir = this.fallbackDirs.get(id);
+    return dir ? path.join(dir, `${id}.jsonl`) : undefined;
+  }
+
   async listSessions(): Promise<SessionSummary[]> {
     const p = this.ensure();
     const db = openRo(p.primaryDb!);
@@ -62,24 +103,22 @@ export class WorkbuddyAdapter implements Adapter {
         const cwd = (r.cwd as string) || "";
         const title = String(r.custom_title || r.title || r.id);
         let messageCount: number | undefined;
-        if (p.projectsRoot) {
-          const jp = path.join(p.projectsRoot, wbCwdEncode(cwd || "D:\\default"), `${r.id}.jsonl`);
-          if (fs.existsSync(jp)) {
-            try {
-              messageCount = fs
-                .readFileSync(jp, "utf-8")
-                .split(/\r?\n/)
-                .filter((l) => {
-                  try {
-                    const o = JSON.parse(l) as Json;
-                    return o.type === "message" && (o.role === "user" || o.role === "assistant");
-                  } catch {
-                    return false;
-                  }
-                }).length;
-            } catch {
-              /* ignore */
-            }
+        const jp = this.resolveJsonl(String(r.id), cwd);
+        if (jp) {
+          try {
+            messageCount = fs
+              .readFileSync(jp, "utf-8")
+              .split(/\r?\n/)
+              .filter((l) => {
+                try {
+                  const o = JSON.parse(l) as Json;
+                  return o.type === "message" && (o.role === "user" || o.role === "assistant");
+                } catch {
+                  return false;
+                }
+              }).length;
+          } catch {
+            /* ignore */
           }
         }
         return {
@@ -120,10 +159,8 @@ export class WorkbuddyAdapter implements Adapter {
       const trackedFiles = new Set<string>();
       let editCount = 0;
       let toolCount = 0;
-      const jp = p.projectsRoot
-        ? path.join(p.projectsRoot, wbCwdEncode(cwd || "D:\\default"), `${id}.jsonl`)
-        : undefined;
-      if (jp && fs.existsSync(jp)) {
+      const jp = this.resolveJsonl(id, cwd);
+      if (jp) {
         const lines = fs.readFileSync(jp, "utf-8").split(/\r?\n/).filter(Boolean);
         for (const line of lines) {
           let o: Json;

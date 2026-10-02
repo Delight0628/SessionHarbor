@@ -55,6 +55,10 @@ import { createVsCodeAdapter, discoverVsCode } from "@sessionharbor/adapter-vsco
 import { createHermesAdapter, discoverHermes } from "@sessionharbor/adapter-hermes";
 import { createOpenClawAdapter, discoverOpenClaw } from "@sessionharbor/adapter-openclaw";
 import {
+  createTeleagentAdapter,
+  discoverTeleagent,
+} from "@sessionharbor/adapter-teleagent";
+import {
   createChatGptExportAdapter,
   discoverChatGptExport,
 } from "@sessionharbor/adapter-chatgpt-export";
@@ -72,6 +76,7 @@ const CLIENTS = [
   "vscode",
   "hermes",
   "openclaw",
+  "teleagent",
   "chatgpt-export",
 ] as const;
 type ClientId = (typeof CLIENTS)[number];
@@ -141,6 +146,8 @@ function getClientPaths(
       return discoverHermes(args["hermes-root"] as string | undefined);
     case "openclaw":
       return discoverOpenClaw(args["openclaw-root"] as string | undefined);
+    case "teleagent":
+      return discoverTeleagent(args["teleagent-db"] as string | undefined);
     case "chatgpt-export":
       return discoverChatGptExport(args["chatgpt-export"] as string | undefined);
   }
@@ -162,6 +169,7 @@ function getAdapter(
   if (id === "vscode") return createVsCodeAdapter(paths as never);
   if (id === "hermes") return createHermesAdapter(paths as never);
   if (id === "openclaw") return createOpenClawAdapter(paths as never);
+  if (id === "teleagent") return createTeleagentAdapter(paths);
   if (id === "chatgpt-export") return createChatGptExportAdapter(paths as never);
   return createWorkbuddyAdapter(paths);
 }
@@ -189,7 +197,7 @@ function help(): void {
 
 用法:
   harbor info
-  harbor list --client alink|claude-code|workbuddy|codex|mimo|cursor|vscode|trae-solo|hermes|openclaw|chatgpt-export [--json] [--title 关键字]
+  harbor list --client alink|claude-code|workbuddy|codex|mimo|cursor|vscode|trae-solo|hermes|openclaw|teleagent|chatgpt-export [--json] [--title 关键字]
   harbor scan [--client ...]          构建/刷新本地 FTS 索引
   harbor search <关键词> [--limit N]   统一全文检索
   harbor migrate --from A --to B [--title ...] [--id ...] [--dry-run] [--overwrite] [--yes]
@@ -223,6 +231,7 @@ function help(): void {
   --trae-root PATH    指定 Trae 数据根
   --hermes-root PATH  指定 Hermes 数据根（~/.hermes）
   --openclaw-root PATH 指定 OpenClaw 数据根（~/.openclaw）
+  --teleagent-db PATH  指定 TeleAgent 主库（~/.local/share/TeleAgent/users/<id>/teleagent.db）
   --chatgpt-export    conversations.json 路径（只读导入）
 `);
 }

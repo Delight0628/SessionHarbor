@@ -35,7 +35,7 @@
 
 ## 为什么需要 SessionHarbor
 
-多 AI 客户端并存已是常态：Claude Code、Codex、Cursor、MiMo Desktop、WorkBuddy、领慧……历史对话却各自为政。
+多 AI 客户端并存已是常态：Claude Code、Codex、Cursor、MiMo Desktop、TeleAgent、WorkBuddy、领慧……历史对话却各自为政。
 
 | 痛点 | 现状 |
 |---|---|
@@ -71,6 +71,7 @@ SessionHarbor 提供本地优先的统一层：**发现 → 索引 → 检索 �
 | Cursor | ✅ | ✅ | `~/.cursor/chats` |
 | VS Code / Trae | ✅ | ✅ | 会话库适配 |
 | Hermes / OpenClaw | ✅ | ✅ | 新增适配 |
+| TeleAgent | ✅ | — | 本地 `teleagent.db`，只读源 |
 | DeepSeek Harness | ✅ | — | 只读源 |
 | Devin / TRAE SOLO | ✅ | ✅ | 桌面客户端库 |
 | ChatGPT Export | ✅ | — | 官方 conversations.json 导入 |

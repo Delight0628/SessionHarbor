@@ -48,6 +48,65 @@ export class WorkbuddyAdapter implements Adapter {
     return this.paths ?? this.discover();
   }
 
+  /** <sessionId> -> 会话文件所在目录，按文件名兜底查找用（按实例缓存） */
+  private fileIndex?: Map<string, string>;
+
+  /**
+   * 定位会话正文文件，命中即返回。依次尝试：
+   *
+   * ① 按工作目录解析出的真实路径查找 —— `cwd` 可能是一个目录联接(junction)
+   *    或符号链接：数据库里记录的是链接路径，正文却落在链接目标那一侧，
+   *    两者字符串不同。先用 realpath 解析出实际位置，才能对上目录名。
+   *
+   * ② 按数据库记录的路径查找 —— 链接建立**之前**创建的会话，其目录名按当时
+   *    的路径生成，用①的解析结果反而对不上，需要保留这条老路径。
+   *
+   * ③ 按会话文件名查找 —— 在 projectsRoot 下按 `<id>.jsonl` 建索引。
+   *    ①② 各自只能给出一个候选目录名，而工作目录可能多次调整，多代目录并存
+   *    时实际目录与两个候选都不一致。该层不做任何路径推算，因此不受此影响。
+   *    索引按适配器实例缓存，避免逐会话重复扫盘（一次扫描会对每个会话调用
+   *    readSession）。
+   *
+   * 另外，不同版本对过长的工作目录可能采用截断或摘要式的命名，本适配器的
+   * 编码未覆盖该变体，此类会话目前也由第 ③ 层兜住。
+   */
+  private resolveJsonl(id: string, cwd: string): string | undefined {
+    const p = this.ensure();
+    if (!p.projectsRoot) return undefined;
+
+    let resolved = cwd;
+    try {
+      resolved = fs.realpathSync(cwd);
+    } catch {
+      /* cwd 不存在或不可解析时按原记录路径查找 */
+    }
+    for (const key of [wbCwdEncode(resolved), wbCwdEncode(cwd)]) {
+      if (!key) continue;
+      const jp = path.join(p.projectsRoot, key, `${id}.jsonl`);
+      if (fs.existsSync(jp)) return jp;
+    }
+
+    if (!this.fileIndex) {
+      const m = new Map<string, string>();
+      try {
+        for (const d of fs.readdirSync(p.projectsRoot, { withFileTypes: true })) {
+          if (!d.isDirectory()) continue;
+          const dir = path.join(p.projectsRoot, d.name);
+          for (const f of fs.readdirSync(dir)) {
+            if (!f.endsWith(".jsonl")) continue;
+            const sid = f.slice(0, -".jsonl".length);
+            if (!m.has(sid)) m.set(sid, dir);
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      this.fileIndex = m;
+    }
+    const dir = this.fileIndex.get(id);
+    return dir ? path.join(dir, `${id}.jsonl`) : undefined;
+  }
+
   async listSessions(): Promise<SessionSummary[]> {
     const p = this.ensure();
     const db = openRo(p.primaryDb!);
@@ -62,24 +121,22 @@ export class WorkbuddyAdapter implements Adapter {
         const cwd = (r.cwd as string) || "";
         const title = String(r.custom_title || r.title || r.id);
         let messageCount: number | undefined;
-        if (p.projectsRoot) {
-          const jp = path.join(p.projectsRoot, wbCwdEncode(cwd || "D:\\default"), `${r.id}.jsonl`);
-          if (fs.existsSync(jp)) {
-            try {
-              messageCount = fs
-                .readFileSync(jp, "utf-8")
-                .split(/\r?\n/)
-                .filter((l) => {
-                  try {
-                    const o = JSON.parse(l) as Json;
-                    return o.type === "message" && (o.role === "user" || o.role === "assistant");
-                  } catch {
-                    return false;
-                  }
-                }).length;
-            } catch {
-              /* ignore */
-            }
+        const jp = this.resolveJsonl(String(r.id), cwd);
+        if (jp) {
+          try {
+            messageCount = fs
+              .readFileSync(jp, "utf-8")
+              .split(/\r?\n/)
+              .filter((l) => {
+                try {
+                  const o = JSON.parse(l) as Json;
+                  return o.type === "message" && (o.role === "user" || o.role === "assistant");
+                } catch {
+                  return false;
+                }
+              }).length;
+          } catch {
+            /* ignore */
           }
         }
         return {
@@ -120,10 +177,8 @@ export class WorkbuddyAdapter implements Adapter {
       const trackedFiles = new Set<string>();
       let editCount = 0;
       let toolCount = 0;
-      const jp = p.projectsRoot
-        ? path.join(p.projectsRoot, wbCwdEncode(cwd || "D:\\default"), `${id}.jsonl`)
-        : undefined;
-      if (jp && fs.existsSync(jp)) {
+      const jp = this.resolveJsonl(id, cwd);
+      if (jp) {
         const lines = fs.readFileSync(jp, "utf-8").split(/\r?\n/).filter(Boolean);
         for (const line of lines) {
           let o: Json;

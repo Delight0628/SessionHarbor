@@ -21,7 +21,8 @@
     "@sessionharbor/adapter-workbuddy": "workspace:*",
     "@sessionharbor/core": "workspace:*",
     "@sessionharbor/adapter-deepseek-harness": "workspace:*",
-    "@sessionharbor/adapter-openclaw": "workspace:*"
+    "@sessionharbor/adapter-openclaw": "workspace:*",
+    "@sessionharbor/adapter-teleagent": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
